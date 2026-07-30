@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 APP_DISPLAY_NAME = "秋招进程台账"
+APP_VERSION = "1.0.0"
 ORGANIZATION_NAME = "PersonalTools"
 APPLICATION_NAME = "AutumnRecruitmentLedger"
 
@@ -55,4 +56,3 @@ DATE_FORMAT = "yyyy-MM-dd"
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAX_AUTO_BACKUPS = 30
-

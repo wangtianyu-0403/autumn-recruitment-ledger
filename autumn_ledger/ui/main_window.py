@@ -24,7 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..backup import BackupError, BackupManager
-from ..constants import APP_DISPLAY_NAME, APPLICATION_STATUSES, STATUS_COLORS
+from ..constants import (
+    APP_DISPLAY_NAME,
+    APP_VERSION,
+    APPLICATION_STATUSES,
+    STATUS_COLORS,
+)
 from ..export import (
     EmptyExportError,
     ExportError,
@@ -114,6 +119,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         self._build_toolbar()
         self.statusBar().showMessage("就绪")
+        self.version_label = QLabel(f"版本v{APP_VERSION}", self)
+        self.version_label.setObjectName("versionLabel")
+        self.statusBar().addPermanentWidget(self.version_label)
 
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)

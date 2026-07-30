@@ -33,6 +33,9 @@ def test_main_window_contains_required_controls(
     assert window.search_edit.placeholderText()
     assert window.status_filter.itemText(0) == "全部状态"
     assert window.table.rowCount() == 1
+    assert window.version_label.objectName() == "versionLabel"
+    assert window.version_label.text() == "版本v1.0.0"
+    assert window.statusBar().isAncestorOf(window.version_label)
 
 
 def test_application_dialog_can_be_created(qtbot) -> None:

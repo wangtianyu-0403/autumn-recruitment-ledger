@@ -40,7 +40,7 @@ try {
         Push-Location $repoRoot
         try {
             & $python -m PyInstaller --noconfirm --clean --onedir --windowed `
-                --name "秋招进程台账" ".\main.py"
+                --icon ".\assets\ui.ico" --name "秋招进程台账" ".\main.py"
             if ($LASTEXITCODE -ne 0) {
                 throw "PyInstaller 打包失败。"
             }

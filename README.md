@@ -20,6 +20,8 @@
 
 Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases) 下载 `autumn-recruitment-ledger-Windows-x64.zip`。
 
+Windows EXE 使用仓库中的 `assets/ui.ico`。当前图标源仅包含一个 16×16 图层，因此在资源管理器的大图标模式中可能出现像素化。
+
 1. 完整解压 ZIP。
 2. 打开“秋招进程台账”文件夹。
 3. 双击 `秋招进程台账.exe`。

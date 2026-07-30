@@ -16,6 +16,16 @@
 
 截图可放在仓库的 `docs/screenshots/` 目录；当前版本不依赖截图或联网资源运行。
 
+## Windows 免安装版
+
+Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases) 下载 `秋招进程台账-Windows-x64.zip`。
+
+1. 完整解压 ZIP。
+2. 打开“秋招进程台账”文件夹。
+3. 双击 `秋招进程台账.exe`。
+
+免安装版无需安装 Python。数据库只保存在当前 Windows 用户的 `%APPDATA%\PersonalTools\AutumnRecruitmentLedger\`，不会包含在 ZIP 中，也不会自动上传。
+
 ## 环境要求
 
 - Python 3.10 或更高版本

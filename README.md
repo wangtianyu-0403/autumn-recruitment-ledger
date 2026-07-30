@@ -29,6 +29,7 @@ Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/a
 ### 更新程序
 
 - 点击工具栏中的“检查更新”，程序才会连接 GitHub 查询最新正式版本；程序启动时不会自动联网。
+- GitHub API 公共额度耗尽并返回 403/429 时，程序会自动改用公开 Release 页面，不需要配置 GitHub Token。
 - 检测到新版本后会先询问，只有确认后才下载。
 - 更新包必须通过 GitHub SHA-256 校验和 ZIP 安全检查，程序随后退出，由外部更新助手替换文件并重新启动。
 - 更新只操作程序安装目录，不会修改 `%APPDATA%\PersonalTools\AutumnRecruitmentLedger\` 中的台账数据库。

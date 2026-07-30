@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -7,6 +9,7 @@ from PySide6.QtCore import QByteArray, QSettings, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -15,6 +18,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -39,6 +43,14 @@ from ..export import (
 from ..models import ApplicationRecord
 from ..paths import AppPaths
 from ..services import ApplicationService
+from ..update import (
+    UpdateError,
+    download_release_asset,
+    fetch_latest_release,
+    launch_updater,
+    parse_version,
+    validate_update_archive,
+)
 from .application_dialog import ApplicationDialog
 from .history_dialog import HistoryDialog
 from .recycle_bin_dialog import RecycleBinDialog
@@ -164,6 +176,90 @@ class MainWindow(QMainWindow):
             button = QPushButton(text)
             button.clicked.connect(callback)
             toolbar.addWidget(button)
+        self.check_update_button = QPushButton("检查更新")
+        self.check_update_button.setObjectName("check_update_button")
+        self.check_update_button.clicked.connect(self.check_for_updates)
+        toolbar.addWidget(self.check_update_button)
+
+    def check_for_updates(self) -> None:
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            release = fetch_latest_release()
+        except UpdateError as exc:
+            QMessageBox.warning(self, "检查更新失败", str(exc))
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if release.version <= parse_version(APP_VERSION):
+            QMessageBox.information(
+                self,
+                "检查更新",
+                f"当前已是最新版本（v{APP_VERSION}）。",
+            )
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "发现新版本",
+            (
+                f"当前版本：v{APP_VERSION}\n"
+                f"最新版本：{release.tag_name}\n\n"
+                "是否下载并安装更新？"
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        if not getattr(sys, "frozen", False):
+            QMessageBox.information(
+                self,
+                "源码运行模式",
+                "源码运行模式请使用 scripts\\sync_local_windows.bat 更新本地程序。",
+            )
+            return
+
+        progress_dialog = QProgressDialog("正在下载更新包…", "", 0, 0, self)
+        progress_dialog.setWindowTitle("下载更新")
+        progress_dialog.setCancelButton(None)
+        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dialog.show()
+
+        def report_progress(downloaded: int, total: int) -> None:
+            if total > 0:
+                progress_dialog.setRange(0, total)
+                progress_dialog.setValue(downloaded)
+            else:
+                progress_dialog.setRange(0, 0)
+            QApplication.processEvents()
+
+        try:
+            update_dir = Path(tempfile.mkdtemp(prefix="autumn-ledger-download-"))
+            archive_path = download_release_asset(
+                release,
+                update_dir / "update.zip",
+                report_progress,
+            )
+            validate_update_archive(archive_path)
+            executable_path = Path(sys.executable).resolve()
+            install_dir = executable_path.parent
+            QMessageBox.information(
+                self,
+                "准备安装更新",
+                "更新包已验证。程序将退出、安装新版本并自动重新启动。",
+            )
+            launch_updater(archive_path, install_dir, executable_path)
+        except UpdateError as exc:
+            QMessageBox.critical(self, "更新失败", str(exc))
+            return
+        finally:
+            progress_dialog.close()
+
+        application = QApplication.instance()
+        if application is not None:
+            application.quit()
 
     def _restore_settings(self) -> None:
         geometry = self.settings.value("window/geometry", QByteArray())

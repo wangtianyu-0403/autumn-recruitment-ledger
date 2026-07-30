@@ -1,16 +1,28 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class StatisticCard(QWidget):
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setProperty("card", True)
+        self.setFixedHeight(90)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(2)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(4)
         title_label = QLabel(title)
         title_label.setStyleSheet("color: #667085; font-size: 13px;")
         self.value_label = QLabel("0")
@@ -19,6 +31,7 @@ class StatisticCard(QWidget):
         )
         layout.addWidget(title_label)
         layout.addWidget(self.value_label)
+        layout.addStretch(1)
 
     def set_value(self, value: int) -> None:
         self.value_label.setText(str(value))

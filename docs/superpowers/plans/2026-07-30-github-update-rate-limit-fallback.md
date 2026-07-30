@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make manual update checks continue securely when GitHub's unauthenticated REST API returns a 403 or 429 rate-limit response.
+**Goal:** Publish v1.1.1 so manual update checks continue securely when GitHub's unauthenticated REST API returns a 403 or 429 rate-limit response.
 
 **Architecture:** Preserve the REST API as the primary metadata source. Add a narrowly scoped GitHub web fallback that follows the public latest-release redirect, parses the exact Windows asset and digest from the expanded-assets HTML, returns the existing `ReleaseInfo`, and leaves download/install verification unchanged.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Keep `APP_VERSION` exactly `1.1.0`; do not create a GitHub Release.
+- Set `APP_VERSION` exactly to `1.1.1`, push GitHub `main`, and create a public `v1.1.1` GitHub Release.
 - Trigger the web fallback only for API `HTTP 403` or `HTTP 429`.
 - Do not add GitHub tokens, credentials, dependencies, automatic checks, retries, or background network traffic.
 - Require HTTPS, exact `github.com` host, exact repository path, exact tag path, exact Windows asset name, and a valid SHA-256 digest.
@@ -22,7 +22,8 @@
 
 - `autumn_ledger/update.py`: owns both update metadata transports, shared metadata validation, and the rate-limit fallback decision.
 - `tests/test_update.py`: verifies Release HTML parsing, security rejection, and API-to-web fallback behavior.
-- `autumn_ledger/constants.py`: verification only; version must remain `1.1.0`.
+- `autumn_ledger/constants.py`: application version changes from `1.1.0` to `1.1.1`.
+- `tests/test_ui_smoke.py`: verifies the visible version label is `版本v1.1.1`.
 - `scripts/sync_local_windows.ps1`: existing build/install entry point, unchanged.
 
 ### Task 1: Parse GitHub Release HTML into trusted metadata
@@ -433,16 +434,18 @@ git add autumn_ledger/update.py tests/test_update.py
 git commit -m "fix: fall back when GitHub API is rate limited"
 ```
 
-### Task 3: Verify the live exhausted-limit path and synchronize locally
+### Task 3: Bump v1.1.1, verify, synchronize, and publish
 
 **Files:**
 - Verify: `autumn_ledger/constants.py`
+- Modify: `autumn_ledger/constants.py`
+- Modify: `tests/test_ui_smoke.py`
 - Verify: `tests/`
 - Build/install through: `scripts/sync_local_windows.ps1`
 
 **Interfaces:**
 - Consumes: real public GitHub API and Release pages.
-- Produces: locally installed v1.1.0 executable with a working manual update check.
+- Produces: locally installed v1.1.1 executable, pushed `main`, and public v1.1.1 Release.
 
 - [ ] **Step 1: Run the complete test suite**
 
@@ -453,15 +456,34 @@ $env:QT_QPA_PLATFORM='offscreen'
 
 Expected: all tests pass.
 
-- [ ] **Step 2: Verify the version is unchanged**
+- [ ] **Step 2: Write the failing visible-version test**
 
-```powershell
-rg -n 'APP_VERSION = "1.1.0"' autumn_ledger/constants.py
+Change the existing assertion in `tests/test_ui_smoke.py`:
+
+```python
+assert window.version_label.text() == "版本v1.1.1"
 ```
 
-Expected: one match.
+Run:
 
-- [ ] **Step 3: Verify the real network fallback**
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_smoke.py::test_main_window_contains_required_controls -q
+```
+
+Expected: FAIL because the application still displays `版本v1.1.0`.
+
+- [ ] **Step 3: Bump the application version**
+
+Update `autumn_ledger/constants.py`:
+
+```python
+APP_VERSION = "1.1.1"
+```
+
+Run the focused UI test again and expect `1 passed`.
+
+- [ ] **Step 4: Verify the real exhausted-limit fallback before publication**
 
 While the GitHub API returns `403 rate limit exceeded`, run:
 
@@ -469,7 +491,7 @@ While the GitHub API returns `403 rate limit exceeded`, run:
 .\.venv\Scripts\python.exe -c "from autumn_ledger.update import fetch_latest_release; r=fetch_latest_release(); print(r.tag_name, r.asset_digest, r.asset_url)"
 ```
 
-Expected:
+Expected before publication:
 
 - command exits with code 0;
 - tag is `v1.1.0`;
@@ -478,7 +500,18 @@ Expected:
 - asset URL ends with
   `autumn-recruitment-ledger-Windows-x64.zip`.
 
-- [ ] **Step 4: Rebuild and synchronize the stable local application**
+- [ ] **Step 5: Commit v1.1.1 and run the full suite**
+
+```powershell
+git add autumn_ledger/constants.py tests/test_ui_smoke.py
+git commit -m "release: prepare v1.1.1"
+$env:QT_QPA_PLATFORM='offscreen'
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Expected: all tests pass.
+
+- [ ] **Step 6: Rebuild and synchronize the stable local application**
 
 ```powershell
 .\scripts\sync_local_windows.ps1 -NoLaunch
@@ -488,7 +521,22 @@ Expected: tests and PyInstaller succeed, the stable installation under
 `%LOCALAPPDATA%\Programs\AutumnRecruitmentLedger` is replaced, and the
 desktop shortcut remains valid.
 
-- [ ] **Step 5: Verify the installed executable and shortcut**
+- [ ] **Step 7: Build and audit the minimum release ZIP**
+
+Compress the exact `dist\秋招进程台账` directory into:
+
+```text
+C:\Users\wty\Documents\Codex\2026-07-30\jie\work\release-v1.1.1\autumn-recruitment-ledger-Windows-x64.zip
+```
+
+Verify:
+
+- archive passes `validate_update_archive()`;
+- archive contains no `.git`, `.venv`, `__pycache__`, database, log, backup,
+  or user-data files;
+- compute and record SHA-256 and byte size.
+
+- [ ] **Step 8: Verify the installed executable and shortcut**
 
 Compare the SHA-256 of the built and installed executables, then verify
 the desktop shortcut target is exactly:
@@ -497,7 +545,25 @@ the desktop shortcut target is exactly:
 C:\Users\wty\AppData\Local\Programs\AutumnRecruitmentLedger\秋招进程台账.exe
 ```
 
-- [ ] **Step 6: Run final repository checks**
+- [ ] **Step 9: Merge, push, and publish v1.1.1**
+
+After a fresh full test run, fast-forward local `main`, push `main`, and
+create GitHub Release `v1.1.1` with the audited ASCII-named ZIP asset.
+Release notes must describe the 403/429 fallback and include the exact
+SHA-256.
+
+- [ ] **Step 10: Verify the remote release and live updater**
+
+Verify through `gh api` and direct download:
+
+- tag is `v1.1.1`, target is `main`, draft and prerelease are false;
+- exactly one ZIP asset exists with the expected name, size, and digest;
+- direct asset download returns HTTP 200;
+- remote `main` equals local `main`;
+- while the unauthenticated API remains limited, `fetch_latest_release()`
+  returns `v1.1.1` through the web fallback.
+
+- [ ] **Step 11: Run final repository checks**
 
 ```powershell
 git diff --check

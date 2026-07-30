@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -149,10 +150,6 @@ def download_release_asset(
 
 
 def validate_update_archive(archive_path: Path) -> None:
-    required = {
-        f"{UPDATE_ROOT_NAME}/{UPDATE_EXECUTABLE_NAME}",
-        f"{UPDATE_ROOT_NAME}/_internal/python313.dll",
-    }
     try:
         with zipfile.ZipFile(archive_path) as archive:
             normalized_names: set[str] = set()
@@ -171,10 +168,12 @@ def validate_update_archive(archive_path: Path) -> None:
 
     if f"{UPDATE_ROOT_NAME}/{UPDATE_EXECUTABLE_NAME}" not in normalized_names:
         raise UpdateError("更新包缺少主程序。")
-    if f"{UPDATE_ROOT_NAME}/_internal/python313.dll" not in normalized_names:
+    runtime_pattern = re.compile(
+        rf"^{re.escape(UPDATE_ROOT_NAME)}/_internal/python3\d+\.dll$",
+        re.IGNORECASE,
+    )
+    if not any(runtime_pattern.fullmatch(name) for name in normalized_names):
         raise UpdateError("更新包缺少 Python 运行时。")
-    if not required.issubset(normalized_names):
-        raise UpdateError("更新包内容不完整。")
 
 
 UPDATER_SCRIPT = r"""param(
@@ -211,11 +210,15 @@ try {
     Expand-Archive -LiteralPath $ArchivePath -DestinationPath $staging
     $newRoot = Join-Path $staging "秋招进程台账"
     $newExe = Join-Path $newRoot $ExecutableName
-    $newRuntime = Join-Path $newRoot "_internal\python313.dll"
+    $newRuntimes = @(
+        Get-ChildItem -File -LiteralPath (Join-Path $newRoot "_internal") `
+            -Filter "python3*.dll" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "^python3\d+\.dll$" }
+    )
     if (-not (Test-Path -LiteralPath $newExe)) {
         throw "更新包缺少主程序。"
     }
-    if (-not (Test-Path -LiteralPath $newRuntime)) {
+    if ($newRuntimes.Count -eq 0) {
         throw "更新包缺少 Python 运行时。"
     }
 

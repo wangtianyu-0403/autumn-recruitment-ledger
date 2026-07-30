@@ -100,6 +100,6 @@ def test_local_sync_rejects_incomplete_dist_without_touching_install(
     result = _run_sync(install_dir, desktop_dir, source_dist)
 
     assert result.returncode != 0
-    assert "python313.dll" in f"{result.stdout}\n{result.stderr}"
+    assert "python3NN.dll" in f"{result.stdout}\n{result.stderr}"
     assert (install_dir / "version.txt").read_text(encoding="utf-8") == "old"
     assert not list(tmp_path.glob("installed.backup-*"))

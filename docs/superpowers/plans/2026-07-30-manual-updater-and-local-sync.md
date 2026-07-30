@@ -95,7 +95,7 @@ The generated script must:
 
 1. wait for `ProcessId` when greater than zero;
 2. extract to a sibling staging directory;
-3. verify EXE and `_internal/python313.dll`;
+3. verify EXE and a versioned `_internal/python3NN.dll`;
 4. move the old install to a timestamped backup;
 5. move the staged app into the original path;
 6. restart unless `-NoRestart`;
@@ -172,7 +172,7 @@ From pytest, run PowerShell with `-SkipBuild -NoLaunch` against temporary fake d
 
 - a valid distribution replaces an old sentinel;
 - the desktop shortcut targets the stable EXE;
-- a missing `_internal/python313.dll` returns non-zero and preserves the old sentinel.
+- a missing versioned `_internal/python3NN.dll` returns non-zero and preserves the old sentinel.
 
 - [ ] **Step 2: Verify RED**
 

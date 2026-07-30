@@ -157,7 +157,7 @@ def _write_update_zip(path: Path, members: dict[str, bytes]) -> Path:
 def _valid_update_members() -> dict[str, bytes]:
     return {
         "秋招进程台账/秋招进程台账.exe": b"new-exe",
-        "秋招进程台账/_internal/python313.dll": b"new-runtime",
+        "秋招进程台账/_internal/python314.dll": b"new-runtime",
         "秋招进程台账/version.txt": b"new-version",
     }
 
@@ -168,9 +168,19 @@ def test_validate_update_archive_accepts_complete_package(tmp_path: Path) -> Non
     validate_update_archive(archive)
 
 
+def test_validate_update_archive_accepts_python313_runtime(tmp_path: Path) -> None:
+    members = _valid_update_members()
+    members["秋招进程台账/_internal/python313.dll"] = members.pop(
+        "秋招进程台账/_internal/python314.dll"
+    )
+    archive = _write_update_zip(tmp_path / "python313.zip", members)
+
+    validate_update_archive(archive)
+
+
 def test_validate_update_archive_requires_runtime(tmp_path: Path) -> None:
     members = _valid_update_members()
-    del members["秋招进程台账/_internal/python313.dll"]
+    del members["秋招进程台账/_internal/python314.dll"]
     archive = _write_update_zip(tmp_path / "missing-runtime.zip", members)
 
     with pytest.raises(UpdateError, match="运行时"):

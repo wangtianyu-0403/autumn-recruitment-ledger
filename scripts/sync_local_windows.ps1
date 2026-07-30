@@ -57,12 +57,16 @@ try {
 
     $source = (Resolve-Path -LiteralPath $SourceDist).Path
     $sourceExe = Join-Path $source "秋招进程台账.exe"
-    $sourceRuntime = Join-Path $source "_internal\python313.dll"
+    $sourceRuntimes = @(
+        Get-ChildItem -File -LiteralPath (Join-Path $source "_internal") `
+            -Filter "python3*.dll" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "^python3\d+\.dll$" }
+    )
     if (-not (Test-Path -LiteralPath $sourceExe)) {
         throw "发布目录缺少秋招进程台账.exe。"
     }
-    if (-not (Test-Path -LiteralPath $sourceRuntime)) {
-        throw "发布目录缺少 _internal\python313.dll。"
+    if ($sourceRuntimes.Count -eq 0) {
+        throw "发布目录缺少 _internal\python3NN.dll。"
     }
 
     $InstallDir = [IO.Path]::GetFullPath($InstallDir)
@@ -92,8 +96,13 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $staging "秋招进程台账.exe"))) {
         throw "临时安装目录缺少秋招进程台账.exe。"
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $staging "_internal\python313.dll"))) {
-        throw "临时安装目录缺少 _internal\python313.dll。"
+    $stagingRuntimes = @(
+        Get-ChildItem -File -LiteralPath (Join-Path $staging "_internal") `
+            -Filter "python3*.dll" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "^python3\d+\.dll$" }
+    )
+    if ($stagingRuntimes.Count -eq 0) {
+        throw "临时安装目录缺少 _internal\python3NN.dll。"
     }
 
     $backupCreated = $false

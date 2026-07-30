@@ -26,6 +26,30 @@ Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/a
 
 免安装版无需安装 Python。数据库只保存在当前 Windows 用户的 `%APPDATA%\PersonalTools\AutumnRecruitmentLedger\`，不会包含在 ZIP 中，也不会自动上传。
 
+### 更新程序
+
+- 点击工具栏中的“检查更新”，程序才会连接 GitHub 查询最新正式版本；程序启动时不会自动联网。
+- 检测到新版本后会先询问，只有确认后才下载。
+- 更新包必须通过 GitHub SHA-256 校验和 ZIP 安全检查，程序随后退出，由外部更新助手替换文件并重新启动。
+- 更新只操作程序安装目录，不会修改 `%APPDATA%\PersonalTools\AutumnRecruitmentLedger\` 中的台账数据库。
+- 更新失败时会恢复旧程序，并在临时更新目录留下日志。
+
+### 开发电脑一键同步
+
+修改代码后双击：
+
+```text
+scripts\sync_local_windows.bat
+```
+
+脚本会依次安装开发依赖、运行完整测试、重新打包，并将程序同步到：
+
+```text
+%LOCALAPPDATA%\Programs\AutumnRecruitmentLedger\
+```
+
+桌面快捷方式会自动创建或修复。程序正在运行或测试失败时，脚本会停止同步并保留旧版本。
+
 ## 环境要求
 
 - Python 3.10 或更高版本

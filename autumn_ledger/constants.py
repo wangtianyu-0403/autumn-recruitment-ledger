@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 APP_DISPLAY_NAME = "秋招进程台账"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 ORGANIZATION_NAME = "PersonalTools"
 APPLICATION_NAME = "AutumnRecruitmentLedger"
 

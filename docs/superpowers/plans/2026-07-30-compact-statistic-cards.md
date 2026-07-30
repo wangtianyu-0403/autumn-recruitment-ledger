@@ -144,12 +144,25 @@ git commit -m "style: compact dashboard statistic cards"
 Append:
 
 ```python
+from PySide6.QtGui import QColor
+
 from autumn_ledger.styles import APP_STYLESHEET
 
 
-def test_stylesheet_targets_statistic_card_widgets() -> None:
-    assert 'QWidget[card="true"]' in APP_STYLESHEET
-    assert 'QLabel[card="true"]' not in APP_STYLESHEET
+def test_application_stylesheet_renders_white_statistic_card(qtbot, qapp) -> None:
+    previous_stylesheet = qapp.styleSheet()
+    try:
+        qapp.setStyleSheet(APP_STYLESHEET)
+        card = StatisticCard("全部岗位")
+        card.resize(240, 90)
+        qtbot.addWidget(card)
+        card.show()
+        qapp.processEvents()
+
+        image = card.grab().toImage()
+        assert image.pixelColor(8, card.height() - 8) == QColor("#FFFFFF")
+    finally:
+        qapp.setStyleSheet(previous_stylesheet)
 ```
 
 - [ ] **Step 2: Run the focused test and verify RED**
@@ -157,10 +170,11 @@ def test_stylesheet_targets_statistic_card_widgets() -> None:
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_widgets.py::test_stylesheet_targets_statistic_card_widgets -q
+.\.venv\Scripts\python.exe -m pytest tests/test_ui_widgets.py::test_application_stylesheet_renders_white_statistic_card -q
 ```
 
-Expected: FAIL because the current selector is `QLabel[card="true"]`.
+Expected: FAIL because the rendered card background remains global
+`#F7F8FA`; the current selector targets `QLabel` instead of `QWidget`.
 
 - [ ] **Step 3: Fix the stylesheet selector**
 
@@ -200,7 +214,7 @@ git commit -m "style: apply statistic card surfaces"
 **Files:**
 - Verify: `autumn_ledger/constants.py`
 - Verify: `tests/`
-- Generate temporarily: `work/compact-stat-cards.png`
+- Generate temporarily: `C:\Users\wty\Documents\Codex\2026-07-30\jie\work\compact-stat-cards.png`
 - Build and install through: `scripts/sync_local_windows.ps1`
 
 **Interfaces:**
@@ -232,7 +246,7 @@ Expected: all tests pass.
 
 Run a temporary Python verification script that constructs `MainWindow`,
 applies `APP_STYLESHEET`, resizes it to `1200x760`, processes Qt events,
-and saves `work/compact-stat-cards.png`.
+and saves `C:\Users\wty\Documents\Codex\2026-07-30\jie\work\compact-stat-cards.png`.
 
 ```python
 import os
@@ -263,8 +277,11 @@ with TemporaryDirectory() as temporary:
     window.resize(1200, 760)
     window.show()
     app.processEvents()
-    Path("work").mkdir(exist_ok=True)
-    assert window.grab().save("work/compact-stat-cards.png")
+    screenshot = Path(
+        r"C:\Users\wty\Documents\Codex\2026-07-30\jie\work"
+        r"\compact-stat-cards.png"
+    )
+    assert window.grab().save(str(screenshot))
     window.close()
     database.close()
 ```

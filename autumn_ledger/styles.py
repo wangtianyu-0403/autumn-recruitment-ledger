@@ -71,15 +71,13 @@ QTableWidget::item:selected {
     background: #DDEAF6;
     color: #1F2933;
 }
-QLabel[card="true"] {
+QWidget[card="true"] {
     background: #FFFFFF;
     border: 1px solid #E0E5EA;
     border-radius: 8px;
-    padding: 12px;
 }
 QStatusBar {
     background: #FFFFFF;
     border-top: 1px solid #E1E5EA;
 }
 """
-

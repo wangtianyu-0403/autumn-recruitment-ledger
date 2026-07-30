@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QSizePolicy
 
+from autumn_ledger.styles import APP_STYLESHEET
 from autumn_ledger.ui.widgets import StatisticCard
 
 
@@ -22,3 +24,19 @@ def test_statistic_card_uses_compact_fixed_geometry(qtbot) -> None:
     )
     assert card.layout().spacing() == 4
     assert card.layout().stretch(card.layout().count() - 1) == 1
+
+
+def test_application_stylesheet_renders_white_statistic_card(qtbot, qapp) -> None:
+    previous_stylesheet = qapp.styleSheet()
+    try:
+        qapp.setStyleSheet(APP_STYLESHEET)
+        card = StatisticCard("全部岗位")
+        card.resize(240, 90)
+        qtbot.addWidget(card)
+        card.show()
+        qapp.processEvents()
+
+        image = card.grab().toImage()
+        assert image.pixelColor(8, card.height() - 8) == QColor("#FFFFFF")
+    finally:
+        qapp.setStyleSheet(previous_stylesheet)

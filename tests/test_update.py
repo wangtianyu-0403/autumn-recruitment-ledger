@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import subprocess
 import zipfile
+from email.message import Message
 from hashlib import sha256
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 
+from autumn_ledger import update
 from autumn_ledger.update import (
     ReleaseInfo,
     UpdateError,
@@ -175,6 +178,66 @@ def test_fetch_latest_release_requires_sha256_digest(tmp_path: Path) -> None:
 
     with pytest.raises(UpdateError, match="SHA-256"):
         fetch_latest_release(_write_release(tmp_path, payload))
+
+
+@pytest.mark.parametrize("status_code", [403, 429])
+def test_fetch_latest_release_falls_back_for_rate_limits(
+    monkeypatch,
+    status_code: int,
+) -> None:
+    expected = ReleaseInfo(
+        version=(1, 2, 0),
+        tag_name="v1.2.0",
+        asset_url="https://github.com/example/update.zip",
+        asset_digest="sha256:" + "c" * 64,
+        html_url="https://github.com/example/releases/tag/v1.2.0",
+    )
+
+    def raise_rate_limit(*args, **kwargs):
+        raise HTTPError(
+            url="https://api.github.com/example",
+            code=status_code,
+            msg="rate limit exceeded",
+            hdrs=Message(),
+            fp=None,
+        )
+
+    monkeypatch.setattr(update, "urlopen", raise_rate_limit)
+    monkeypatch.setattr(
+        update,
+        "_fetch_latest_release_from_web",
+        lambda timeout=10.0: expected,
+        raising=False,
+    )
+
+    assert fetch_latest_release() == expected
+
+
+def test_fetch_latest_release_does_not_fallback_for_other_http_errors(
+    monkeypatch,
+) -> None:
+    def raise_server_error(*args, **kwargs):
+        raise HTTPError(
+            url="https://api.github.com/example",
+            code=500,
+            msg="server error",
+            hdrs=Message(),
+            fp=None,
+        )
+
+    def unexpected_fallback(*args, **kwargs):
+        raise AssertionError("web fallback must not run")
+
+    monkeypatch.setattr(update, "urlopen", raise_server_error)
+    monkeypatch.setattr(
+        update,
+        "_fetch_latest_release_from_web",
+        unexpected_fallback,
+        raising=False,
+    )
+
+    with pytest.raises(UpdateError, match="GitHub"):
+        fetch_latest_release()
 
 
 def _release_for_file(path: Path, digest: str | None = None) -> ReleaseInfo:

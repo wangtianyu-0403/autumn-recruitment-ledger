@@ -125,6 +125,42 @@ def _parse_web_release(final_url: str, assets_html: str) -> ReleaseInfo:
     )
 
 
+def _fetch_latest_release_from_web(timeout: float = 10.0) -> ReleaseInfo:
+    latest_request = Request(
+        LATEST_RELEASE_WEB,
+        headers={"User-Agent": USER_AGENT},
+    )
+    try:
+        with urlopen(latest_request, timeout=timeout) as response:
+            final_url = response.geturl()
+
+        parsed = urlsplit(final_url)
+        tag_prefix = f"{REPOSITORY_WEB_PATH}/releases/tag/"
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != "github.com"
+            or not parsed.path.startswith(tag_prefix)
+        ):
+            raise UpdateError("GitHub Release 跳转地址无效。")
+        encoded_tag = parsed.path.removeprefix(tag_prefix)
+        if not encoded_tag or "/" in encoded_tag:
+            raise UpdateError("GitHub Release 版本地址无效。")
+
+        assets_url = EXPANDED_ASSETS_WEB.format(tag=encoded_tag)
+        assets_request = Request(
+            assets_url,
+            headers={"User-Agent": USER_AGENT},
+        )
+        with urlopen(assets_request, timeout=timeout) as response:
+            assets_html = response.read().decode("utf-8")
+    except UpdateError:
+        raise
+    except (HTTPError, URLError, OSError, UnicodeDecodeError) as exc:
+        raise UpdateError(f"无法读取备用 GitHub Release 信息：{exc}") from exc
+
+    return _parse_web_release(final_url, assets_html)
+
+
 def fetch_latest_release(
     api_url: str = LATEST_RELEASE_API,
     timeout: float = 10.0,
@@ -139,7 +175,17 @@ def fetch_latest_release(
     try:
         with urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except HTTPError as exc:
+        if exc.code in {403, 429}:
+            try:
+                return _fetch_latest_release_from_web(timeout)
+            except UpdateError as fallback_error:
+                raise UpdateError(
+                    "GitHub API 请求受限，且备用 Release 信息读取失败："
+                    f"{fallback_error}"
+                ) from fallback_error
+        raise UpdateError(f"无法读取 GitHub 更新信息：{exc}") from exc
+    except (URLError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise UpdateError(f"无法读取 GitHub 更新信息：{exc}") from exc
 
     if not isinstance(payload, dict):

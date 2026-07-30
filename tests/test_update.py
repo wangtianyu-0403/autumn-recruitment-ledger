@@ -11,6 +11,8 @@ import pytest
 from autumn_ledger.update import (
     ReleaseInfo,
     UpdateError,
+    WINDOWS_ASSET_NAME,
+    _parse_web_release,
     download_release_asset,
     fetch_latest_release,
     parse_version,
@@ -60,6 +62,78 @@ def _valid_payload() -> dict[str, object]:
             }
         ],
     }
+
+
+def _expanded_assets_html(
+    *,
+    asset_name: str = WINDOWS_ASSET_NAME,
+    digest: str = "sha256:" + "b" * 64,
+) -> str:
+    return f"""
+    <a href="/wangtianyu-0403/autumn-recruitment-ledger/releases/download/v1.2.0/{asset_name}">
+      <span>{asset_name}</span>
+    </a>
+    <clipboard-copy
+      aria-label="Copy to clipboard digest for {asset_name}"
+      value="{digest}">
+    </clipboard-copy>
+    """
+
+
+def test_parse_web_release_reads_exact_asset_and_digest() -> None:
+    release = _parse_web_release(
+        "https://github.com/wangtianyu-0403/"
+        "autumn-recruitment-ledger/releases/tag/v1.2.0",
+        _expanded_assets_html(),
+    )
+
+    assert release == ReleaseInfo(
+        version=(1, 2, 0),
+        tag_name="v1.2.0",
+        asset_url=(
+            "https://github.com/wangtianyu-0403/autumn-recruitment-ledger/"
+            "releases/download/v1.2.0/"
+            "autumn-recruitment-ledger-Windows-x64.zip"
+        ),
+        asset_digest="sha256:" + "b" * 64,
+        html_url=(
+            "https://github.com/wangtianyu-0403/"
+            "autumn-recruitment-ledger/releases/tag/v1.2.0"
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "final_url",
+    [
+        "http://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases/tag/v1.2.0",
+        "https://example.com/wangtianyu-0403/autumn-recruitment-ledger/releases/tag/v1.2.0",
+        "https://github.com/other/repository/releases/tag/v1.2.0",
+    ],
+)
+def test_parse_web_release_rejects_untrusted_latest_url(final_url: str) -> None:
+    with pytest.raises(UpdateError, match="Release"):
+        _parse_web_release(final_url, _expanded_assets_html())
+
+
+@pytest.mark.parametrize(
+    ("asset_name", "digest"),
+    [
+        ("wrong.zip", "sha256:" + "b" * 64),
+        (WINDOWS_ASSET_NAME, ""),
+        (WINDOWS_ASSET_NAME, "sha256:not-a-digest"),
+    ],
+)
+def test_parse_web_release_rejects_invalid_asset_metadata(
+    asset_name: str,
+    digest: str,
+) -> None:
+    with pytest.raises(UpdateError):
+        _parse_web_release(
+            "https://github.com/wangtianyu-0403/"
+            "autumn-recruitment-ledger/releases/tag/v1.2.0",
+            _expanded_assets_html(asset_name=asset_name, digest=digest),
+        )
 
 
 def test_fetch_latest_release_parses_valid_file_response(tmp_path: Path) -> None:

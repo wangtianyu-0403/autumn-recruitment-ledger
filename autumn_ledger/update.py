@@ -8,9 +8,11 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from hashlib import sha256
+from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from collections.abc import Callable
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 LATEST_RELEASE_API = (
@@ -18,6 +20,12 @@ LATEST_RELEASE_API = (
     "wangtianyu-0403/autumn-recruitment-ledger/releases/latest"
 )
 WINDOWS_ASSET_NAME = "autumn-recruitment-ledger-Windows-x64.zip"
+GITHUB_WEB_ORIGIN = "https://github.com"
+REPOSITORY_WEB_PATH = "/wangtianyu-0403/autumn-recruitment-ledger"
+LATEST_RELEASE_WEB = f"{GITHUB_WEB_ORIGIN}{REPOSITORY_WEB_PATH}/releases/latest"
+EXPANDED_ASSETS_WEB = (
+    f"{GITHUB_WEB_ORIGIN}{REPOSITORY_WEB_PATH}/releases/expanded_assets/{{tag}}"
+)
 USER_AGENT = "AutumnRecruitmentLedger-Updater"
 UPDATE_ROOT_NAME = "秋招进程台账"
 UPDATE_EXECUTABLE_NAME = "秋招进程台账.exe"
@@ -43,6 +51,78 @@ def parse_version(value: str) -> tuple[int, int, int]:
     if len(parts) != 3 or any(not part.isdigit() for part in parts):
         raise UpdateError(f"无法识别版本号：{value or '空值'}")
     return tuple(int(part) for part in parts)  # type: ignore[return-value]
+
+
+def _validate_asset_digest(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("sha256:")
+        or len(value) != len("sha256:") + 64
+    ):
+        raise UpdateError("Windows 更新包缺少有效的 SHA-256 校验值。")
+    try:
+        int(value.removeprefix("sha256:"), 16)
+    except ValueError as exc:
+        raise UpdateError("Windows 更新包的 SHA-256 校验值无效。") from exc
+    return value.lower()
+
+
+class _ExpandedAssetsParser(HTMLParser):
+    def __init__(self, tag_name: str) -> None:
+        super().__init__()
+        encoded_tag = quote(tag_name, safe="")
+        self.expected_href = (
+            f"{REPOSITORY_WEB_PATH}/releases/download/{encoded_tag}/"
+            f"{WINDOWS_ASSET_NAME}"
+        )
+        self.asset_href: str | None = None
+        self.asset_digest: str | None = None
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        values = dict(attrs)
+        if tag == "a" and values.get("href") == self.expected_href:
+            self.asset_href = self.expected_href
+        if (
+            tag == "clipboard-copy"
+            and values.get("aria-label")
+            == f"Copy to clipboard digest for {WINDOWS_ASSET_NAME}"
+        ):
+            self.asset_digest = values.get("value")
+
+
+def _parse_web_release(final_url: str, assets_html: str) -> ReleaseInfo:
+    parsed = urlsplit(final_url)
+    tag_prefix = f"{REPOSITORY_WEB_PATH}/releases/tag/"
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "github.com"
+        or not parsed.path.startswith(tag_prefix)
+    ):
+        raise UpdateError("GitHub Release 跳转地址无效。")
+
+    encoded_tag = parsed.path.removeprefix(tag_prefix)
+    if not encoded_tag or "/" in encoded_tag:
+        raise UpdateError("GitHub Release 版本地址无效。")
+    tag_name = unquote(encoded_tag)
+    version = parse_version(tag_name)
+
+    parser = _ExpandedAssetsParser(tag_name)
+    parser.feed(assets_html)
+    if parser.asset_href is None:
+        raise UpdateError(f"最新版本中未找到 Windows 更新包：{WINDOWS_ASSET_NAME}")
+    asset_digest = _validate_asset_digest(parser.asset_digest)
+
+    return ReleaseInfo(
+        version=version,
+        tag_name=tag_name,
+        asset_url=urljoin(GITHUB_WEB_ORIGIN, parser.asset_href),
+        asset_digest=asset_digest,
+        html_url=final_url,
+    )
 
 
 def fetch_latest_release(
@@ -91,22 +171,13 @@ def fetch_latest_release(
     asset_digest = asset.get("digest")
     if not isinstance(asset_url, str) or not asset_url:
         raise UpdateError("Windows 更新包缺少下载地址。")
-    if (
-        not isinstance(asset_digest, str)
-        or not asset_digest.startswith("sha256:")
-        or len(asset_digest) != len("sha256:") + 64
-    ):
-        raise UpdateError("Windows 更新包缺少有效的 SHA-256 校验值。")
-    try:
-        int(asset_digest.removeprefix("sha256:"), 16)
-    except ValueError as exc:
-        raise UpdateError("Windows 更新包的 SHA-256 校验值无效。") from exc
+    validated_digest = _validate_asset_digest(asset_digest)
 
     return ReleaseInfo(
         version=parse_version(tag_name),
         tag_name=tag_name,
         asset_url=asset_url,
-        asset_digest=asset_digest.lower(),
+        asset_digest=validated_digest,
         html_url=html_url,
     )
 

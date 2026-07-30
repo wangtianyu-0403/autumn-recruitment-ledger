@@ -18,7 +18,7 @@
 
 ## Windows 免安装版
 
-Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases) 下载 `秋招进程台账-Windows-x64.zip`。
+Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases) 下载 `autumn-recruitment-ledger-Windows-x64.zip`。
 
 1. 完整解压 ZIP。
 2. 打开“秋招进程台账”文件夹。

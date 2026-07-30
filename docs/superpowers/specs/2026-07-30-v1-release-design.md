@@ -33,7 +33,7 @@
 - ZIP 只包含程序、PyInstaller 运行时和使用说明，不包含数据库、日志、备份、源码、测试或构建中间文件。
 - 将源码、测试、README 和设计文档提交并推送到现有仓库的 `main` 分支。
 - 创建标签与 Release `v1.0.0`，标题为 `秋招进程台账 v1.0.0`。
-- 将 ZIP 作为 Release 附件上传；不把二进制提交进 Git 历史。
+- 将 ZIP 以稳定的 ASCII 附件名 `autumn-recruitment-ledger-Windows-x64.zip` 上传；不把二进制提交进 Git 历史。
 - Release 说明包含系统要求、运行步骤、本地数据行为和 ZIP 的 SHA-256。
 
 ## 发布验证

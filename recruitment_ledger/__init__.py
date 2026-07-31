@@ -1,3 +1,5 @@
 """招聘记录台账。"""
 
-__version__ = "1.0.0"
+from .constants import APP_VERSION
+
+__version__ = APP_VERSION

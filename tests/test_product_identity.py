@@ -20,3 +20,9 @@ def test_renamed_entrypoint_is_importable() -> None:
 
     assert recruitment_ledger.__doc__ == "招聘记录台账。"
     assert callable(run)
+
+
+def test_renamed_package_exposes_current_version() -> None:
+    import recruitment_ledger
+
+    assert recruitment_ledger.__version__ == "1.1.2"

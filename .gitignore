@@ -17,6 +17,6 @@ backups/
 exports/
 .idea/
 .vscode/
+.worktrees/
 Thumbs.db
 .DS_Store
-

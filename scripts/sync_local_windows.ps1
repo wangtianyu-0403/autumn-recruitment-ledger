@@ -12,6 +12,39 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
 
 try {
+    $InstallDir = [IO.Path]::GetFullPath($InstallDir)
+    $DesktopDir = [IO.Path]::GetFullPath($DesktopDir)
+    $installParent = Split-Path -Parent $InstallDir
+    $installLeaf = Split-Path -Leaf $InstallDir
+    $installedExe = Join-Path $InstallDir "招聘记录台账.exe"
+    $oldInstall = [IO.Path]::GetFullPath(
+        (Join-Path $env:LOCALAPPDATA "Programs\AutumnRecruitmentLedger")
+    )
+    $oldExe = Join-Path $oldInstall "秋招进程台账.exe"
+    $oldShortcut = Join-Path $DesktopDir "秋招进程台账.lnk"
+
+    if (Test-Path -LiteralPath $installedExe) {
+        $running = @(
+            Get-CimInstance Win32_Process -Filter "Name = '招聘记录台账.exe'" `
+                -ErrorAction SilentlyContinue |
+                Where-Object { $_.ExecutablePath -eq $installedExe }
+        )
+        if ($running.Count -gt 0) {
+            throw "本地程序正在运行。请先关闭程序，再重新执行同步。"
+        }
+    }
+
+    if (Test-Path -LiteralPath $oldExe) {
+        $oldRunning = @(
+            Get-CimInstance Win32_Process -Filter "Name = '秋招进程台账.exe'" `
+                -ErrorAction SilentlyContinue |
+                Where-Object { $_.ExecutablePath -eq $oldExe }
+        )
+        if ($oldRunning.Count -gt 0) {
+            throw "旧版程序正在运行。请先关闭程序，再重新执行同步。"
+        }
+    }
+
     if (-not $SkipBuild) {
         if (-not (Test-Path -LiteralPath $python)) {
             py -3 -m venv (Join-Path $repoRoot ".venv")
@@ -69,27 +102,6 @@ try {
         throw "发布目录缺少 _internal\python3NN.dll。"
     }
 
-    $InstallDir = [IO.Path]::GetFullPath($InstallDir)
-    $DesktopDir = [IO.Path]::GetFullPath($DesktopDir)
-    $installParent = Split-Path -Parent $InstallDir
-    $installLeaf = Split-Path -Leaf $InstallDir
-    $installedExe = Join-Path $InstallDir "招聘记录台账.exe"
-    $oldInstall = [IO.Path]::GetFullPath(
-        (Join-Path $env:LOCALAPPDATA "Programs\AutumnRecruitmentLedger")
-    )
-    $oldShortcut = Join-Path $DesktopDir "秋招进程台账.lnk"
-
-    if (Test-Path -LiteralPath $installedExe) {
-        $running = @(
-            Get-CimInstance Win32_Process -Filter "Name = '招聘记录台账.exe'" `
-                -ErrorAction SilentlyContinue |
-                Where-Object { $_.ExecutablePath -eq $installedExe }
-        )
-        if ($running.Count -gt 0) {
-            throw "本地程序正在运行。请先关闭程序，再重新执行同步。"
-        }
-    }
-
     New-Item -ItemType Directory -Force -Path $installParent, $DesktopDir | Out-Null
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
     $staging = Join-Path $installParent "$installLeaf.staging-$stamp"
@@ -141,18 +153,30 @@ try {
     $shortcut.IconLocation = "$($shortcut.TargetPath),0"
     $shortcut.Save()
 
+    $launchVerified = $false
     if (-not $NoLaunch) {
-        Start-Process -FilePath $shortcut.TargetPath -WorkingDirectory $InstallDir
+        $launchedProcess = Start-Process -FilePath $shortcut.TargetPath `
+            -WorkingDirectory $InstallDir -PassThru
+        $exitedDuringCheck = $launchedProcess.WaitForExit(1000)
+        if ($exitedDuringCheck -and $launchedProcess.ExitCode -ne 0) {
+            throw "新程序启动测试失败，退出码：$($launchedProcess.ExitCode)。"
+        }
+        $launchVerified = $true
     }
 
-    if (
-        -not $oldInstall.Equals($InstallDir, [StringComparison]::OrdinalIgnoreCase) `
-        -and (Test-Path -LiteralPath $oldInstall)
-    ) {
-        Remove-Item -Recurse -Force -LiteralPath $oldInstall
+    if ($launchVerified) {
+        if (
+            -not $oldInstall.Equals($InstallDir, [StringComparison]::OrdinalIgnoreCase) `
+            -and (Test-Path -LiteralPath $oldInstall)
+        ) {
+            Remove-Item -Recurse -Force -LiteralPath $oldInstall
+        }
+        if (Test-Path -LiteralPath $oldShortcut) {
+            Remove-Item -Force -LiteralPath $oldShortcut
+        }
     }
-    if (Test-Path -LiteralPath $oldShortcut) {
-        Remove-Item -Force -LiteralPath $oldShortcut
+    else {
+        Write-Host "已跳过启动验证，保留旧版安装和快捷方式。"
     }
 
     Write-Host ""

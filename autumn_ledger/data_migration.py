@@ -33,7 +33,12 @@ def migrate_legacy_data(new_paths: AppPaths, old_root: Path) -> bool:
                 raise DataMigrationError("旧数据库未通过 SQLite 完整性检查。")
         _copy_directory_contents(old_paths.backups_dir, new_paths.backups_dir)
         _copy_directory_contents(old_paths.exports_dir, new_paths.exports_dir)
-        os.replace(temporary, new_paths.database_path)
+        try:
+            os.link(temporary, new_paths.database_path)
+        except FileExistsError:
+            temporary.unlink(missing_ok=True)
+            return False
+        temporary.unlink()
         return True
     except DataMigrationError:
         temporary.unlink(missing_ok=True)

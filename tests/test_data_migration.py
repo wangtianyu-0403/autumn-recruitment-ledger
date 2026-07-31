@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import autumn_ledger.data_migration as data_migration
 from autumn_ledger.data_migration import DataMigrationError, migrate_legacy_data
 from autumn_ledger.paths import AppPaths, legacy_data_root
 
@@ -70,6 +71,36 @@ def test_existing_new_database_is_never_overwritten(tmp_path: Path) -> None:
 
     assert migrate_legacy_data(new_paths, old_paths.root) is False
     assert read_company(new_paths.database_path) == "新"
+
+
+def test_database_created_after_preflight_is_never_overwritten(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_paths = AppPaths.from_root(tmp_path / "AutumnRecruitmentLedger")
+    new_paths = AppPaths.from_root(tmp_path / "RecruitmentRecordLedger")
+    old_source = create_legacy_database(old_paths.database_path, company="旧")
+    old_source.close()
+    original_copy = data_migration._copy_directory_contents
+    competing_database_created = False
+
+    def copy_and_create_competing_database(source: Path, destination: Path) -> None:
+        nonlocal competing_database_created
+        original_copy(source, destination)
+        if not competing_database_created:
+            competing_source = create_legacy_database(
+                new_paths.database_path, company="新"
+            )
+            competing_source.close()
+            competing_database_created = True
+
+    monkeypatch.setattr(
+        data_migration, "_copy_directory_contents", copy_and_create_competing_database
+    )
+
+    assert migrate_legacy_data(new_paths, old_paths.root) is False
+    assert read_company(new_paths.database_path) == "新"
+    assert not new_paths.database_path.with_name(".migration.db").exists()
 
 
 def test_corrupt_legacy_database_does_not_leave_new_database(tmp_path: Path) -> None:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import time
 
-from autumn_ledger.models import ApplicationRecord
-from autumn_ledger.repository import ApplicationRepository
+from recruitment_ledger.models import ApplicationRecord
+from recruitment_ledger.repository import ApplicationRepository
 
 
 def make_record(
@@ -104,4 +104,3 @@ def test_statistics_and_updated_order(repository: ApplicationRepository) -> None
     listed = repository.list_applications()
     assert counts == {"笔试": 1, "已有Offer": 1}
     assert [item.id for item in listed] == [first, second]
-

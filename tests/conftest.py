@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from autumn_ledger.database import Database
-from autumn_ledger.paths import AppPaths
-from autumn_ledger.repository import ApplicationRepository
-from autumn_ledger.services import ApplicationService
+from recruitment_ledger.database import Database
+from recruitment_ledger.paths import AppPaths
+from recruitment_ledger.repository import ApplicationRepository
+from recruitment_ledger.services import ApplicationService
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -36,4 +36,3 @@ def repository(database: Database) -> ApplicationRepository:
 @pytest.fixture
 def service(repository: ApplicationRepository) -> ApplicationService:
     return ApplicationService(repository)
-

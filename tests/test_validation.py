@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from autumn_ledger.models import ApplicationRecord
-from autumn_ledger.validation import ValidationError, normalize_url, validate_application
+from recruitment_ledger.models import ApplicationRecord
+from recruitment_ledger.validation import ValidationError, normalize_url, validate_application
 
 
 def valid_record() -> ApplicationRecord:
@@ -37,4 +37,3 @@ def test_url_normalization_and_valid_http() -> None:
 def test_invalid_urls_are_rejected(url: str) -> None:
     with pytest.raises(ValidationError):
         normalize_url(url)
-

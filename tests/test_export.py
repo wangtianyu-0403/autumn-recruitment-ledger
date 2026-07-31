@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from autumn_ledger.export import EmptyExportError, export_applications_to_csv
-from autumn_ledger.models import ApplicationRecord
+from recruitment_ledger.export import EmptyExportError, export_applications_to_csv
+from recruitment_ledger.models import ApplicationRecord
 
 
 def test_export_chinese_and_special_characters(tmp_path: Path) -> None:
@@ -34,4 +34,3 @@ def test_empty_export_does_not_create_file(tmp_path: Path) -> None:
     with pytest.raises(EmptyExportError):
         export_applications_to_csv([], destination)
     assert not destination.exists()
-

@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from autumn_ledger.backup import BackupError, BackupManager
-from autumn_ledger.database import Database
-from autumn_ledger.models import ApplicationRecord
-from autumn_ledger.paths import AppPaths
-from autumn_ledger.repository import ApplicationRepository
+from recruitment_ledger.backup import BackupError, BackupManager
+from recruitment_ledger.database import Database
+from recruitment_ledger.models import ApplicationRecord
+from recruitment_ledger.paths import AppPaths
+from recruitment_ledger.repository import ApplicationRepository
 
 
 def test_create_backup_contains_data(

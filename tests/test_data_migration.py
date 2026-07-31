@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-import autumn_ledger.data_migration as data_migration
-from autumn_ledger.data_migration import DataMigrationError, migrate_legacy_data
-from autumn_ledger.paths import AppPaths, legacy_data_root
+import recruitment_ledger.data_migration as data_migration
+from recruitment_ledger.data_migration import DataMigrationError, migrate_legacy_data
+from recruitment_ledger.paths import AppPaths, legacy_data_root
 
 
 def create_legacy_database(path: Path, company: str) -> sqlite3.Connection:

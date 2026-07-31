@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-import autumn_ledger.application as application
-from autumn_ledger.database import Database
-from autumn_ledger.models import ApplicationRecord
-from autumn_ledger.paths import AppPaths
-from autumn_ledger.repository import ApplicationRepository
+import recruitment_ledger.application as application
+from recruitment_ledger.database import Database
+from recruitment_ledger.models import ApplicationRecord
+from recruitment_ledger.paths import AppPaths
+from recruitment_ledger.repository import ApplicationRepository
 
 
 def create_legacy_database(path: Path, company: str) -> None:

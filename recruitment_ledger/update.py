@@ -26,9 +26,9 @@ LATEST_RELEASE_WEB = f"{GITHUB_WEB_ORIGIN}{REPOSITORY_WEB_PATH}/releases/latest"
 EXPANDED_ASSETS_WEB = (
     f"{GITHUB_WEB_ORIGIN}{REPOSITORY_WEB_PATH}/releases/expanded_assets/{{tag}}"
 )
-USER_AGENT = "AutumnRecruitmentLedger-Updater"
-UPDATE_ROOT_NAME = "秋招进程台账"
-UPDATE_EXECUTABLE_NAME = "秋招进程台账.exe"
+USER_AGENT = "RecruitmentRecordLedger-Updater"
+UPDATE_ROOT_NAME = "招聘记录台账"
+UPDATE_EXECUTABLE_NAME = "招聘记录台账.exe"
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
@@ -325,7 +325,7 @@ try {
 
     New-Item -ItemType Directory -Force -Path $staging | Out-Null
     Expand-Archive -LiteralPath $ArchivePath -DestinationPath $staging
-    $newRoot = Join-Path $staging "秋招进程台账"
+    $newRoot = Join-Path $staging "招聘记录台账"
     $newExe = Join-Path $newRoot $ExecutableName
     $newRuntimes = @(
         Get-ChildItem -File -LiteralPath (Join-Path $newRoot "_internal") `
@@ -378,7 +378,7 @@ def launch_updater(
     executable_path: Path,
 ) -> Path:
     validate_update_archive(archive_path)
-    update_dir = Path(tempfile.mkdtemp(prefix="autumn-ledger-update-"))
+    update_dir = Path(tempfile.mkdtemp(prefix="recruitment-ledger-update-"))
     script_path = write_updater_script(update_dir / "apply-update.ps1")
     log_path = update_dir / "update.log"
     command = [

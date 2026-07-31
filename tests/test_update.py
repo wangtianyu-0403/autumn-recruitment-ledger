@@ -10,8 +10,8 @@ from urllib.error import HTTPError
 
 import pytest
 
-from autumn_ledger import update
-from autumn_ledger.update import (
+from recruitment_ledger import update
+from recruitment_ledger.update import (
     ReleaseInfo,
     UpdateError,
     WINDOWS_ASSET_NAME,
@@ -293,9 +293,9 @@ def _write_update_zip(path: Path, members: dict[str, bytes]) -> Path:
 
 def _valid_update_members() -> dict[str, bytes]:
     return {
-        "秋招进程台账/秋招进程台账.exe": b"new-exe",
-        "秋招进程台账/_internal/python314.dll": b"new-runtime",
-        "秋招进程台账/version.txt": b"new-version",
+        "招聘记录台账/招聘记录台账.exe": b"new-exe",
+        "招聘记录台账/_internal/python314.dll": b"new-runtime",
+        "招聘记录台账/version.txt": b"new-version",
     }
 
 
@@ -307,8 +307,8 @@ def test_validate_update_archive_accepts_complete_package(tmp_path: Path) -> Non
 
 def test_validate_update_archive_accepts_python313_runtime(tmp_path: Path) -> None:
     members = _valid_update_members()
-    members["秋招进程台账/_internal/python313.dll"] = members.pop(
-        "秋招进程台账/_internal/python314.dll"
+    members["招聘记录台账/_internal/python313.dll"] = members.pop(
+        "招聘记录台账/_internal/python314.dll"
     )
     archive = _write_update_zip(tmp_path / "python313.zip", members)
 
@@ -317,7 +317,7 @@ def test_validate_update_archive_accepts_python313_runtime(tmp_path: Path) -> No
 
 def test_validate_update_archive_requires_runtime(tmp_path: Path) -> None:
     members = _valid_update_members()
-    del members["秋招进程台账/_internal/python314.dll"]
+    del members["招聘记录台账/_internal/python314.dll"]
     archive = _write_update_zip(tmp_path / "missing-runtime.zip", members)
 
     with pytest.raises(UpdateError, match="运行时"):
@@ -338,9 +338,9 @@ def test_validate_update_archive_rejects_unsafe_paths(
 
 
 def test_generated_updater_replaces_install_and_keeps_backup(tmp_path: Path) -> None:
-    install_dir = tmp_path / "AutumnRecruitmentLedger"
+    install_dir = tmp_path / "RecruitmentRecordLedger"
     (install_dir / "_internal").mkdir(parents=True)
-    (install_dir / "秋招进程台账.exe").write_bytes(b"old-exe")
+    (install_dir / "招聘记录台账.exe").write_bytes(b"old-exe")
     (install_dir / "_internal" / "python313.dll").write_bytes(b"old-runtime")
     (install_dir / "version.txt").write_text("old-version", encoding="utf-8")
     archive = _write_update_zip(tmp_path / "update.zip", _valid_update_members())
@@ -362,7 +362,7 @@ def test_generated_updater_replaces_install_and_keeps_backup(tmp_path: Path) -> 
             "-InstallDir",
             str(install_dir),
             "-ExecutableName",
-            "秋招进程台账.exe",
+            "招聘记录台账.exe",
             "-LogPath",
             str(log_path),
             "-NoRestart",
@@ -375,7 +375,7 @@ def test_generated_updater_replaces_install_and_keeps_backup(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stderr
     assert (install_dir / "version.txt").read_text(encoding="utf-8") == "new-version"
-    backups = list(tmp_path.glob("AutumnRecruitmentLedger.backup-*"))
+    backups = list(tmp_path.glob("RecruitmentRecordLedger.backup-*"))
     assert len(backups) == 1
     assert (backups[0] / "version.txt").read_text(encoding="utf-8") == "old-version"
     assert "更新完成" in log_path.read_text(encoding="utf-8-sig")

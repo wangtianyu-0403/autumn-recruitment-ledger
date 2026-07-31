@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autumn_ledger.database import Database
-from autumn_ledger.models import ApplicationRecord
-from autumn_ledger.repository import ApplicationRepository
+from recruitment_ledger.database import Database
+from recruitment_ledger.models import ApplicationRecord
+from recruitment_ledger.repository import ApplicationRepository
 
 
 def table_names(database: Database) -> set[str]:
@@ -39,4 +39,3 @@ def test_repeated_initialization_keeps_existing_data(tmp_path: Path) -> None:
     assert loaded is not None
     assert loaded.company_name == "甲公司"
     second.close()
-

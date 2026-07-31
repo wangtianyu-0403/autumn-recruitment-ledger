@@ -3,8 +3,8 @@ from __future__ import annotations
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QSizePolicy
 
-from autumn_ledger.styles import APP_STYLESHEET
-from autumn_ledger.ui.widgets import StatisticCard
+from recruitment_ledger.styles import APP_STYLESHEET
+from recruitment_ledger.ui.widgets import StatisticCard
 
 
 def test_statistic_card_uses_compact_fixed_geometry(qtbot) -> None:

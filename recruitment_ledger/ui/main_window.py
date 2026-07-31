@@ -236,7 +236,7 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
 
         try:
-            update_dir = Path(tempfile.mkdtemp(prefix="autumn-ledger-download-"))
+            update_dir = Path(tempfile.mkdtemp(prefix="recruitment-ledger-download-"))
             archive_path = download_release_asset(
                 release,
                 update_dir / "update.zip",
@@ -438,7 +438,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "导出失败", str(exc))
 
     def manual_backup(self) -> None:
-        filename = f"autumn_recruitment_manual_{datetime.now():%Y%m%d_%H%M%S}.db"
+        filename = f"recruitment_record_manual_{datetime.now():%Y%m%d_%H%M%S}.db"
         selected, _ = QFileDialog.getSaveFileName(
             self,
             "备份数据库",

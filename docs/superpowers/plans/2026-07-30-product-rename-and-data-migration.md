@@ -109,9 +109,9 @@ def migrate_legacy_data(new_paths: AppPaths, old_root: Path) -> bool:
             integrity = target.execute("PRAGMA integrity_check").fetchone()
             if integrity is None or integrity[0] != "ok":
                 raise DataMigrationError("旧数据库未通过 SQLite 完整性检查。")
-        os.replace(temporary, new_paths.database_path)
         _copy_directory_contents(old_paths.backups_dir, new_paths.backups_dir)
         _copy_directory_contents(old_paths.exports_dir, new_paths.exports_dir)
+        os.replace(temporary, new_paths.database_path)
         return True
     except DataMigrationError:
         temporary.unlink(missing_ok=True)
@@ -155,15 +155,18 @@ Expected: all focused tests pass.
 
 ```python
 def test_startup_migrates_before_database_initialization(monkeypatch, tmp_path):
-    events: list[str] = []
-    monkeypatch.setattr(AppPaths, "from_standard_paths", lambda: AppPaths.from_root(tmp_path / "new"))
-    monkeypatch.setattr(application, "migrate_legacy_data", lambda paths, old: events.append("migrate") or False)
-    monkeypatch.setattr(Database, "initialize", lambda self: events.append("initialize"))
-    monkeypatch.setattr(application, "MainWindow", FakeWindow)
+    old_paths = AppPaths.from_root(tmp_path / "AutumnRecruitmentLedger")
+    new_paths = AppPaths.from_root(tmp_path / "RecruitmentRecordLedger")
+    create_legacy_database(old_paths.database_path, company="迁移记录")
+    monkeypatch.setattr(AppPaths, "from_standard_paths", lambda: new_paths)
+    monkeypatch.setattr(application, "legacy_data_root", lambda root: old_paths.root)
 
-    application.run()
+    assert application.run() == 0
 
-    assert events.index("migrate") < events.index("initialize")
+    migrated = Database(new_paths.database_path)
+    migrated.initialize()
+    records = ApplicationRepository(migrated).list_applications()
+    assert [record.company_name for record in records] == ["迁移记录"]
 
 
 def test_cleanup_counts_old_and_new_daily_backups_together(
@@ -247,19 +250,25 @@ Expected: all focused tests pass.
 
 - [ ] **Step 1: Write failing branding tests**
 
-Add exact assertions:
+Verify the identity through the real window and import boundary:
 
 ```python
-def test_product_identity() -> None:
-    assert APP_DISPLAY_NAME == "招聘记录台账"
-    assert APP_VERSION == "1.1.2"
-    assert APPLICATION_NAME == "RecruitmentRecordLedger"
+def test_renamed_application_exposes_new_identity(
+    qtbot, service, app_paths, database
+) -> None:
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+
+    assert window.windowTitle() == "招聘记录台账"
+    assert window.version_label.text() == "版本v1.1.2"
 
 
-def test_main_imports_renamed_package() -> None:
-    source = Path("main.py").read_text(encoding="utf-8")
-    assert "from recruitment_ledger.application import run" in source
-    assert "autumn_ledger" not in source
+def test_renamed_entrypoint_is_importable() -> None:
+    import recruitment_ledger
+    from main import run
+
+    assert recruitment_ledger.__doc__ == "招聘记录台账。"
+    assert callable(run)
 ```
 
 - [ ] **Step 2: Run tests and verify failure**
@@ -342,13 +351,33 @@ Expected: imports compile and focused tests pass.
 
 - [ ] **Step 1: Update failing updater and sync tests first**
 
-Change fixtures and assertions to require:
+Build controlled API and HTML fixtures for the renamed repository and assert the returned
+release can be installed:
 
 ```python
-assert update.WINDOWS_ASSET_NAME == "Recruitment-Record-Ledger-Windows-x64.zip"
-assert update.REPOSITORY_WEB_PATH == "/wangtianyu-0403/Recruitment-Record-Ledger"
-assert update.UPDATE_ROOT_NAME == "招聘记录台账"
-assert update.UPDATE_EXECUTABLE_NAME == "招聘记录台账.exe"
+def test_release_parser_accepts_renamed_windows_asset():
+    payload = release_payload(
+        tag="v1.1.2",
+        asset_name="Recruitment-Record-Ledger-Windows-x64.zip",
+        repository="wangtianyu-0403/Recruitment-Record-Ledger",
+    )
+
+    release = update.parse_release_payload(payload)
+
+    assert release.tag_name == "v1.1.2"
+    assert release.asset_url.endswith(
+        "/Recruitment-Record-Ledger-Windows-x64.zip"
+    )
+
+
+def test_archive_validator_accepts_renamed_executable(tmp_path):
+    archive = build_update_zip(
+        tmp_path,
+        root="招聘记录台账",
+        executable="招聘记录台账.exe",
+    )
+
+    assert update.validate_update_archive(archive) == archive
 ```
 
 The sync test must assert the new install directory and shortcut, and must verify that an old

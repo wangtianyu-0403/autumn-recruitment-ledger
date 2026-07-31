@@ -29,6 +29,10 @@ class AppPaths:
         return cls.from_root(Path(location))
 
     @classmethod
+    def legacy_root_from_standard_paths(cls) -> Path:
+        return legacy_data_root(cls.from_standard_paths().root)
+
+    @classmethod
     def from_root(cls, root: Path) -> "AppPaths":
         resolved = root.expanduser().resolve()
         data_dir = resolved / "data"
@@ -40,7 +44,7 @@ class AppPaths:
             backups_dir=resolved / "backups",
             exports_dir=resolved / "exports",
             logs_dir=logs_dir,
-            log_path=logs_dir / "autumn_ledger.log",
+            log_path=logs_dir / "recruitment_ledger.log",
         )
 
     def ensure_directories(self) -> None:

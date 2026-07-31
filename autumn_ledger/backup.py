@@ -36,7 +36,7 @@ class BackupManager:
 
     def create_daily_backup(self, now: datetime | None = None) -> Path | None:
         current = now or datetime.now()
-        target = self.paths.backups_dir / f"autumn_recruitment_{current:%Y%m%d}.db"
+        target = self.paths.backups_dir / f"recruitment_record_{current:%Y%m%d}.db"
         if target.exists():
             self.cleanup_auto_backups()
             return None
@@ -46,7 +46,10 @@ class BackupManager:
 
     def cleanup_auto_backups(self, max_count: int = MAX_AUTO_BACKUPS) -> None:
         files = sorted(
-            self.paths.backups_dir.glob("autumn_recruitment_????????.db"),
+            {
+                *self.paths.backups_dir.glob("autumn_recruitment_????????.db"),
+                *self.paths.backups_dir.glob("recruitment_record_????????.db"),
+            },
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )

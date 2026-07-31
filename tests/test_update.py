@@ -51,20 +51,31 @@ def _write_release(tmp_path: Path, payload: dict[str, object]) -> str:
     return path.as_uri()
 
 
-def _valid_payload() -> dict[str, object]:
+def release_payload(
+    *,
+    tag: str = "v1.2.0",
+    asset_name: str = "Recruitment-Record-Ledger-Windows-x64.zip",
+    repository: str = "wangtianyu-0403/Recruitment-Record-Ledger",
+) -> dict[str, object]:
     return {
         "draft": False,
         "prerelease": False,
-        "tag_name": "v1.2.0",
-        "html_url": "https://github.com/example/releases/tag/v1.2.0",
+        "tag_name": tag,
+        "html_url": f"https://github.com/{repository}/releases/tag/{tag}",
         "assets": [
             {
-                "name": "autumn-recruitment-ledger-Windows-x64.zip",
-                "browser_download_url": "https://example.invalid/app.zip",
+                "name": asset_name,
+                "browser_download_url": (
+                    f"https://github.com/{repository}/releases/download/{tag}/{asset_name}"
+                ),
                 "digest": "sha256:" + "a" * 64,
             }
         ],
     }
+
+
+def _valid_payload() -> dict[str, object]:
+    return release_payload()
 
 
 def _expanded_assets_html(
@@ -73,7 +84,7 @@ def _expanded_assets_html(
     digest: str = "sha256:" + "b" * 64,
 ) -> str:
     return f"""
-    <a href="/wangtianyu-0403/autumn-recruitment-ledger/releases/download/v1.2.0/{asset_name}">
+    <a href="/wangtianyu-0403/Recruitment-Record-Ledger/releases/download/v1.2.0/{asset_name}">
       <span>{asset_name}</span>
     </a>
     <clipboard-copy
@@ -83,10 +94,23 @@ def _expanded_assets_html(
     """
 
 
+def test_release_parser_accepts_renamed_windows_asset() -> None:
+    payload = release_payload(
+        tag="v1.1.2",
+        asset_name="Recruitment-Record-Ledger-Windows-x64.zip",
+        repository="wangtianyu-0403/Recruitment-Record-Ledger",
+    )
+
+    release = update.parse_release_payload(payload)
+
+    assert release.tag_name == "v1.1.2"
+    assert release.asset_url.endswith("/Recruitment-Record-Ledger-Windows-x64.zip")
+
+
 def test_parse_web_release_reads_exact_asset_and_digest() -> None:
     release = _parse_web_release(
         "https://github.com/wangtianyu-0403/"
-        "autumn-recruitment-ledger/releases/tag/v1.2.0",
+        "Recruitment-Record-Ledger/releases/tag/v1.2.0",
         _expanded_assets_html(),
     )
 
@@ -94,14 +118,14 @@ def test_parse_web_release_reads_exact_asset_and_digest() -> None:
         version=(1, 2, 0),
         tag_name="v1.2.0",
         asset_url=(
-            "https://github.com/wangtianyu-0403/autumn-recruitment-ledger/"
+            "https://github.com/wangtianyu-0403/Recruitment-Record-Ledger/"
             "releases/download/v1.2.0/"
-            "autumn-recruitment-ledger-Windows-x64.zip"
+            "Recruitment-Record-Ledger-Windows-x64.zip"
         ),
         asset_digest="sha256:" + "b" * 64,
         html_url=(
             "https://github.com/wangtianyu-0403/"
-            "autumn-recruitment-ledger/releases/tag/v1.2.0"
+            "Recruitment-Record-Ledger/releases/tag/v1.2.0"
         ),
     )
 
@@ -109,8 +133,8 @@ def test_parse_web_release_reads_exact_asset_and_digest() -> None:
 @pytest.mark.parametrize(
     "final_url",
     [
-        "http://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases/tag/v1.2.0",
-        "https://example.com/wangtianyu-0403/autumn-recruitment-ledger/releases/tag/v1.2.0",
+        "http://github.com/wangtianyu-0403/Recruitment-Record-Ledger/releases/tag/v1.2.0",
+        "https://example.com/wangtianyu-0403/Recruitment-Record-Ledger/releases/tag/v1.2.0",
         "https://github.com/other/repository/releases/tag/v1.2.0",
     ],
 )
@@ -134,7 +158,7 @@ def test_parse_web_release_rejects_invalid_asset_metadata(
     with pytest.raises(UpdateError):
         _parse_web_release(
             "https://github.com/wangtianyu-0403/"
-            "autumn-recruitment-ledger/releases/tag/v1.2.0",
+            "Recruitment-Record-Ledger/releases/tag/v1.2.0",
             _expanded_assets_html(asset_name=asset_name, digest=digest),
         )
 
@@ -145,10 +169,50 @@ def test_fetch_latest_release_parses_valid_file_response(tmp_path: Path) -> None
     assert release == ReleaseInfo(
         version=(1, 2, 0),
         tag_name="v1.2.0",
-        asset_url="https://example.invalid/app.zip",
+        asset_url=(
+            "https://github.com/wangtianyu-0403/Recruitment-Record-Ledger/"
+            "releases/download/v1.2.0/"
+            "Recruitment-Record-Ledger-Windows-x64.zip"
+        ),
         asset_digest="sha256:" + "a" * 64,
-        html_url="https://github.com/example/releases/tag/v1.2.0",
+        html_url=(
+            "https://github.com/wangtianyu-0403/"
+            "Recruitment-Record-Ledger/releases/tag/v1.2.0"
+        ),
     )
+
+
+def test_fetch_latest_release_requests_renamed_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[tuple[str, str | None]] = []
+
+    class ApiResponse:
+        def __enter__(self) -> "ApiResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(release_payload(tag="v1.1.2")).encode("utf-8")
+
+    def open_api(request, timeout: float) -> ApiResponse:
+        requests.append((request.full_url, request.get_header("User-agent")))
+        return ApiResponse()
+
+    monkeypatch.setattr(update, "urlopen", open_api)
+
+    release = fetch_latest_release()
+
+    assert release.tag_name == "v1.1.2"
+    assert requests == [
+        (
+            "https://api.github.com/repos/"
+            "wangtianyu-0403/Recruitment-Record-Ledger/releases/latest",
+            "RecruitmentRecordLedger-Updater",
+        )
+    ]
 
 
 @pytest.mark.parametrize(("field", "value"), [("draft", True), ("prerelease", True)])
@@ -302,7 +366,7 @@ def _valid_update_members() -> dict[str, bytes]:
 def test_validate_update_archive_accepts_complete_package(tmp_path: Path) -> None:
     archive = _write_update_zip(tmp_path / "valid.zip", _valid_update_members())
 
-    validate_update_archive(archive)
+    assert validate_update_archive(archive) == archive
 
 
 def test_validate_update_archive_accepts_python313_runtime(tmp_path: Path) -> None:

@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\AutumnRecruitmentLedger"),
+    [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\RecruitmentRecordLedger"),
     [string]$DesktopDir = [Environment]::GetFolderPath("Desktop"),
     [string]$SourceDist = "",
     [switch]$SkipBuild,
@@ -40,7 +40,7 @@ try {
         Push-Location $repoRoot
         try {
             & $python -m PyInstaller --noconfirm --clean --onedir --windowed `
-                --icon ".\assets\ui.ico" --name "秋招进程台账" ".\main.py"
+                --icon ".\assets\ui.ico" --name "招聘记录台账" ".\main.py"
             if ($LASTEXITCODE -ne 0) {
                 throw "PyInstaller 打包失败。"
             }
@@ -48,7 +48,7 @@ try {
         finally {
             Pop-Location
         }
-        $SourceDist = Join-Path $repoRoot "dist\秋招进程台账"
+        $SourceDist = Join-Path $repoRoot "dist\招聘记录台账"
     }
 
     if ([string]::IsNullOrWhiteSpace($SourceDist)) {
@@ -56,14 +56,14 @@ try {
     }
 
     $source = (Resolve-Path -LiteralPath $SourceDist).Path
-    $sourceExe = Join-Path $source "秋招进程台账.exe"
+    $sourceExe = Join-Path $source "招聘记录台账.exe"
     $sourceRuntimes = @(
         Get-ChildItem -File -LiteralPath (Join-Path $source "_internal") `
             -Filter "python3*.dll" -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match "^python3\d+\.dll$" }
     )
     if (-not (Test-Path -LiteralPath $sourceExe)) {
-        throw "发布目录缺少秋招进程台账.exe。"
+        throw "发布目录缺少招聘记录台账.exe。"
     }
     if ($sourceRuntimes.Count -eq 0) {
         throw "发布目录缺少 _internal\python3NN.dll。"
@@ -73,11 +73,15 @@ try {
     $DesktopDir = [IO.Path]::GetFullPath($DesktopDir)
     $installParent = Split-Path -Parent $InstallDir
     $installLeaf = Split-Path -Leaf $InstallDir
-    $installedExe = Join-Path $InstallDir "秋招进程台账.exe"
+    $installedExe = Join-Path $InstallDir "招聘记录台账.exe"
+    $oldInstall = [IO.Path]::GetFullPath(
+        (Join-Path $env:LOCALAPPDATA "Programs\AutumnRecruitmentLedger")
+    )
+    $oldShortcut = Join-Path $DesktopDir "秋招进程台账.lnk"
 
     if (Test-Path -LiteralPath $installedExe) {
         $running = @(
-            Get-CimInstance Win32_Process -Filter "Name = '秋招进程台账.exe'" `
+            Get-CimInstance Win32_Process -Filter "Name = '招聘记录台账.exe'" `
                 -ErrorAction SilentlyContinue |
                 Where-Object { $_.ExecutablePath -eq $installedExe }
         )
@@ -93,8 +97,8 @@ try {
     $failed = Join-Path $installParent "$installLeaf.failed-$stamp"
     Copy-Item -Recurse -LiteralPath $source -Destination $staging
 
-    if (-not (Test-Path -LiteralPath (Join-Path $staging "秋招进程台账.exe"))) {
-        throw "临时安装目录缺少秋招进程台账.exe。"
+    if (-not (Test-Path -LiteralPath (Join-Path $staging "招聘记录台账.exe"))) {
+        throw "临时安装目录缺少招聘记录台账.exe。"
     }
     $stagingRuntimes = @(
         Get-ChildItem -File -LiteralPath (Join-Path $staging "_internal") `
@@ -125,16 +129,30 @@ try {
         throw
     }
 
-    $shortcutPath = Join-Path $DesktopDir "秋招进程台账.lnk"
+    if (-not (Test-Path -LiteralPath $installedExe)) {
+        throw "安装目录缺少招聘记录台账.exe。"
+    }
+
+    $shortcutPath = Join-Path $DesktopDir "招聘记录台账.lnk"
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = Join-Path $InstallDir "秋招进程台账.exe"
+    $shortcut.TargetPath = $installedExe
     $shortcut.WorkingDirectory = $InstallDir
     $shortcut.IconLocation = "$($shortcut.TargetPath),0"
     $shortcut.Save()
 
     if (-not $NoLaunch) {
         Start-Process -FilePath $shortcut.TargetPath -WorkingDirectory $InstallDir
+    }
+
+    if (
+        -not $oldInstall.Equals($InstallDir, [StringComparison]::OrdinalIgnoreCase) `
+        -and (Test-Path -LiteralPath $oldInstall)
+    ) {
+        Remove-Item -Recurse -Force -LiteralPath $oldInstall
+    }
+    if (Test-Path -LiteralPath $oldShortcut) {
+        Remove-Item -Force -LiteralPath $oldShortcut
     }
 
     Write-Host ""

@@ -1,6 +1,8 @@
-# 秋招进程台账
+# 招聘记录台账
 
-一个离线、单机使用的秋招投递管理桌面程序。招聘记录保存在本机 SQLite 数据库中，支持状态历史、搜索筛选、回收站、CSV 导出以及数据库备份和恢复。
+招聘记录台账是一个离线、单机使用的招聘投递管理桌面程序。招聘记录只保存在本机 SQLite 数据库中，不需要登录，不提供云同步，也不会自动上传业务数据。
+
+项目仓库：<https://github.com/wangtianyu-0403/Recruitment-Record-Ledger>
 
 ## 功能
 
@@ -14,28 +16,41 @@
 - 保存窗口位置、尺寸、状态筛选和表格列宽
 - 日志滚动写入本地应用数据目录
 
-截图可放在仓库的 `docs/screenshots/` 目录；当前版本不依赖截图或联网资源运行。
+截图可放在仓库的 `docs/screenshots/` 目录；程序运行不依赖截图或在线资源。
 
 ## Windows 免安装版
 
-Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases) 下载 `autumn-recruitment-ledger-Windows-x64.zip`。
-
-Windows EXE 使用仓库中的 `assets/ui.ico`。当前图标源仅包含一个 16×16 图层，因此在资源管理器的大图标模式中可能出现像素化。
+Windows 10/11 64 位用户可在 [Releases](https://github.com/wangtianyu-0403/Recruitment-Record-Ledger/releases) 下载 `Recruitment-Record-Ledger-Windows-x64.zip`。
 
 1. 完整解压 ZIP。
-2. 打开“秋招进程台账”文件夹。
-3. 双击 `秋招进程台账.exe`。
+2. 打开“招聘记录台账”文件夹。
+3. 双击 `招聘记录台账.exe`。
 
-免安装版无需安装 Python。数据库只保存在当前 Windows 用户的 `%APPDATA%\PersonalTools\AutumnRecruitmentLedger\`，不会包含在 ZIP 中，也不会自动上传。
+免安装版无需安装 Python。Windows EXE 使用仓库中的 `assets/ui.ico`。
 
-### 更新程序
+### 从 v1.1.1 一次性手动升级到 v1.1.2
 
-- 点击工具栏中的“检查更新”，程序才会连接 GitHub 查询最新正式版本；程序启动时不会自动联网。
-- GitHub API 公共额度耗尽并返回 403/429 时，程序会自动改用公开 Release 页面，不需要配置 GitHub Token。
-- 检测到新版本后会先询问，只有确认后才下载。
-- 更新包必须通过 GitHub SHA-256 校验和 ZIP 安全检查，程序随后退出，由外部更新助手替换文件并重新启动。
-- 更新只操作程序安装目录，不会修改 `%APPDATA%\PersonalTools\AutumnRecruitmentLedger\` 中的台账数据库。
-- 更新失败时会恢复旧程序，并在临时更新目录留下日志。
+v1.1.1 的“检查更新”仍查询旧发布位置，因此升级到 v1.1.2 必须手动完成一次：
+
+1. 退出正在运行的 v1.1.1。
+2. 从新仓库 Releases 页面下载 `Recruitment-Record-Ledger-Windows-x64.zip`。
+3. 将 ZIP 完整解压到新的程序目录，不要把压缩包内容混入旧程序目录。
+4. 运行新目录中的 `招聘记录台账.exe`。
+5. 在程序中确认既有记录可见，再按需保留或删除旧程序文件。
+
+首次启动 v1.1.2 时，如果新数据目录尚无数据库而旧目录
+`%APPDATA%\PersonalTools\AutumnRecruitmentLedger\` 中存在数据库，程序会使用 SQLite backup API 将已提交数据复制到新目录，并执行完整性检查。已有的新数据库绝不会被覆盖；旧数据目录会原样保留作为回退副本。旧 `backups/` 和 `exports/` 中尚未存在于新目录的文件也会复制，旧日志不会迁移。迁移失败时新数据库不会生效，旧数据仍保留。
+
+数据库文件名保持为 `data/autumn_recruitment.db`，仅应用数据根目录更名。
+
+### v1.1.2 之后的“检查更新”
+
+- 只有点击工具栏中的“检查更新”才会连接 GitHub；程序启动时不会自动联网。
+- 程序查询新仓库的最新正式版本；GitHub API 返回 403/429 时会改用公开 Release 页面。
+- 检测到新版本后先询问，确认后才下载 `Recruitment-Record-Ledger-Windows-x64.zip`。
+- 更新包必须通过 GitHub SHA-256 校验和 ZIP 安全检查。
+- 外部更新助手会备份当前程序目录、安装并启动新的 `招聘记录台账.exe`；失败时恢复旧程序。
+- 更新器只操作程序安装目录，不修改本地台账数据库。
 
 ### 开发电脑一键同步
 
@@ -45,13 +60,13 @@ Windows EXE 使用仓库中的 `assets/ui.ico`。当前图标源仅包含一个 
 scripts\sync_local_windows.bat
 ```
 
-脚本会依次安装开发依赖、运行完整测试、重新打包，并将程序同步到：
+脚本会安装开发依赖、运行完整测试、重新打包，并将程序原子同步到：
 
 ```text
-%LOCALAPPDATA%\Programs\AutumnRecruitmentLedger\
+%LOCALAPPDATA%\Programs\RecruitmentRecordLedger\
 ```
 
-桌面快捷方式会自动创建或修复。程序正在运行或测试失败时，脚本会停止同步并保留旧版本。
+同步脚本验证新 `招聘记录台账.exe` 后创建或修复桌面快捷方式 `招聘记录台账.lnk`。新程序安装并完成启动测试后，脚本才清理 v1.1.1 的旧本地安装目录和旧快捷方式。程序正在运行、测试失败或发布目录不完整时，同步会停止并保留现有安装。
 
 ## 环境要求
 
@@ -78,13 +93,11 @@ python3 -m venv .venv
 .venv/bin/python main.py
 ```
 
-Windows 也可以双击 `scripts\run_windows.bat`。脚本会自动创建 `.venv`、安装运行依赖并启动程序。macOS/Linux 可运行：
+Windows 也可以双击 `scripts\run_windows.bat`。macOS/Linux 可运行：
 
 ```bash
 ./scripts/run_unix.sh
 ```
-
-VS Code 用户在集成终端进入项目根目录后，选择 `.venv` 解释器，执行 `python main.py` 即可。
 
 ## 开发依赖和测试
 
@@ -107,12 +120,12 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 ## 数据位置
 
-程序通过 `QStandardPaths.AppDataLocation` 确定目录，不依赖源码目录。启动前设置组织名 `PersonalTools` 和应用名 `AutumnRecruitmentLedger`。
+程序通过 `QStandardPaths.AppDataLocation` 确定目录，不依赖源码目录。启动前设置组织名 `PersonalTools` 和应用名 `RecruitmentRecordLedger`。
 
-本机 Windows 实测路径为：
+Windows 上的数据根目录为：
 
 ```text
-%APPDATA%\PersonalTools\AutumnRecruitmentLedger\
+%APPDATA%\PersonalTools\RecruitmentRecordLedger\
 ```
 
 其他操作系统和 Qt 配置会映射到各自的标准应用数据位置，应以程序内“打开数据目录”按钮打开的位置为准。目录内容：
@@ -121,7 +134,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 data/autumn_recruitment.db
 backups/
 exports/
-logs/autumn_ledger.log
+logs/recruitment_ledger.log
 ```
 
 业务数据只保存在 SQLite 数据库中。QSettings 只保存窗口和筛选等界面设置。
@@ -144,10 +157,11 @@ Windows 双击或在终端执行：
 scripts\build_windows.bat
 ```
 
-脚本安装开发依赖、运行完整测试，然后使用 PyInstaller `--onedir --windowed` 打包。产物位于：
+脚本安装开发依赖、运行完整测试，然后使用 PyInstaller
+`--onedir --windowed --icon assets\ui.ico --name "招聘记录台账"` 打包。产物位于：
 
 ```text
-dist\秋招进程台账\秋招进程台账.exe
+dist\招聘记录台账\招聘记录台账.exe
 ```
 
 macOS/Linux：

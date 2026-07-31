@@ -19,11 +19,11 @@ set QT_QPA_PLATFORM=
 if exist "build" rmdir /s /q "build"
 if exist "dist" rmdir /s /q "dist"
 
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --onedir --icon "assets\ui.ico" --name "秋招进程台账" main.py
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --onedir --windowed --icon "assets\ui.ico" --name "招聘记录台账" main.py
 if errorlevel 1 goto :error
 
 echo.
-echo 打包完成：%CD%\dist\秋招进程台账\秋招进程台账.exe
+echo 打包完成：%CD%\dist\招聘记录台账\招聘记录台账.exe
 exit /b 0
 
 :error

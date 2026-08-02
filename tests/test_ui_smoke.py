@@ -398,7 +398,7 @@ def test_main_window_contains_required_controls(
     assert window.table.columnWidth(8) >= 230
     assert window.table.columnWidth(8) >= action_cell.minimumSizeHint().width()
     assert window.version_label.objectName() == "versionLabel"
-    assert window.version_label.text() == "版本v1.1.2"
+    assert window.version_label.text() == "版本v1.1.3"
     assert window.statusBar().isAncestorOf(window.version_label)
     assert window.check_update_button.text() == "检查更新"
 
@@ -415,11 +415,11 @@ def test_manual_update_check_reports_current_version(
         main_window,
         "fetch_latest_release",
         lambda: ReleaseInfo(
-            version=(1, 1, 2),
-            tag_name="v1.1.2",
+            version=(1, 1, 3),
+            tag_name="v1.1.3",
             asset_url="https://example.invalid/update.zip",
             asset_digest="sha256:" + "a" * 64,
-            html_url="https://example.invalid/v1.1.2",
+            html_url="https://example.invalid/v1.1.3",
         ),
     )
     monkeypatch.setattr(
@@ -432,7 +432,7 @@ def test_manual_update_check_reports_current_version(
 
     window.check_for_updates()
 
-    assert messages == [("检查更新", "当前已是最新版本（v1.1.2）。")]
+    assert messages == [("检查更新", "当前已是最新版本（v1.1.3）。")]
 
 
 def test_source_mode_never_installs_newer_release(

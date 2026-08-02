@@ -452,16 +452,17 @@ git add recruitment_ledger/update.py scripts tests/test_update.py tests/test_syn
 git commit -m "build: rename Windows distribution and updater"
 ```
 
-### Task 5: Rename local repository and verify the renamed baseline
+### Task 5: Verify the renamed baseline and remote
 
 **Files:**
-- Rename outside Git: `C:\Users\wty\autumn-recruitment-ledger` to `C:\Users\wty\Recruitment-Record-Ledger`
 - Update Git config: `origin`
 - Verify: entire tracked tree
 
 **Interfaces:**
 - Consumes: all commits from Tasks 1–4
-- Produces: clean renamed local repository ready for the ordering plan
+- Produces: a verified feature branch ready for the ordering plan
+- Defers: physical repository-folder rename until the feature branch is merged and this nested
+  worktree is removed
 
 - [ ] **Step 1: Run the full source test suite**
 
@@ -475,14 +476,16 @@ git status --short
 
 Expected: all tests pass; compilation and diff checks succeed; worktree is clean.
 
-- [ ] **Step 2: Rename the repository directory safely**
+- [ ] **Step 2: Confirm the final folder-rename preconditions**
 
-From `C:\Users\wty`, resolve both paths, ensure the source is the expected Git repository and the
-destination does not exist, then:
+Verify that `C:\Users\wty\Recruitment-Record-Ledger` does not exist and record that the physical
+rename is deferred. Do not move the current parent repository while this worktree exists; its
+`.git` file points into that parent repository. The final integration task will remove the
+worktree, then atomically move:
 
 ```powershell
 Move-Item -LiteralPath "C:\Users\wty\autumn-recruitment-ledger" `
-  -Destination "C:\Users\wty\Recruitment-Record-Ledger"
+    -Destination "C:\Users\wty\Recruitment-Record-Ledger"
 ```
 
 - [ ] **Step 3: Update and verify Git origin**
@@ -493,7 +496,7 @@ git remote get-url origin
 git ls-remote --exit-code origin HEAD
 ```
 
-Run from `C:\Users\wty\Recruitment-Record-Ledger`.
+Run from the current isolated worktree.
 Expected: both local origin and remote lookup use the new repository.
 
 - [ ] **Step 4: Build and smoke-test the renamed application**

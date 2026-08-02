@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-APP_DISPLAY_NAME = "秋招进程台账"
-APP_VERSION = "1.1.1"
+APP_DISPLAY_NAME = "招聘记录台账"
+APP_VERSION = "1.1.2"
 ORGANIZATION_NAME = "PersonalTools"
-APPLICATION_NAME = "AutumnRecruitmentLedger"
+APPLICATION_NAME = "RecruitmentRecordLedger"
 
 APPLICATION_STATUSES: tuple[str, ...] = (
     "待投递",

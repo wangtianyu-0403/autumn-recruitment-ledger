@@ -10,8 +10,8 @@ from urllib.error import HTTPError
 
 import pytest
 
-from autumn_ledger import update
-from autumn_ledger.update import (
+from recruitment_ledger import update
+from recruitment_ledger.update import (
     ReleaseInfo,
     UpdateError,
     WINDOWS_ASSET_NAME,
@@ -51,20 +51,31 @@ def _write_release(tmp_path: Path, payload: dict[str, object]) -> str:
     return path.as_uri()
 
 
-def _valid_payload() -> dict[str, object]:
+def release_payload(
+    *,
+    tag: str = "v1.2.0",
+    asset_name: str = "Recruitment-Record-Ledger-Windows-x64.zip",
+    repository: str = "wangtianyu-0403/Recruitment-Record-Ledger",
+) -> dict[str, object]:
     return {
         "draft": False,
         "prerelease": False,
-        "tag_name": "v1.2.0",
-        "html_url": "https://github.com/example/releases/tag/v1.2.0",
+        "tag_name": tag,
+        "html_url": f"https://github.com/{repository}/releases/tag/{tag}",
         "assets": [
             {
-                "name": "autumn-recruitment-ledger-Windows-x64.zip",
-                "browser_download_url": "https://example.invalid/app.zip",
+                "name": asset_name,
+                "browser_download_url": (
+                    f"https://github.com/{repository}/releases/download/{tag}/{asset_name}"
+                ),
                 "digest": "sha256:" + "a" * 64,
             }
         ],
     }
+
+
+def _valid_payload() -> dict[str, object]:
+    return release_payload()
 
 
 def _expanded_assets_html(
@@ -73,7 +84,7 @@ def _expanded_assets_html(
     digest: str = "sha256:" + "b" * 64,
 ) -> str:
     return f"""
-    <a href="/wangtianyu-0403/autumn-recruitment-ledger/releases/download/v1.2.0/{asset_name}">
+    <a href="/wangtianyu-0403/Recruitment-Record-Ledger/releases/download/v1.2.0/{asset_name}">
       <span>{asset_name}</span>
     </a>
     <clipboard-copy
@@ -83,10 +94,23 @@ def _expanded_assets_html(
     """
 
 
+def test_release_parser_accepts_renamed_windows_asset() -> None:
+    payload = release_payload(
+        tag="v1.1.2",
+        asset_name="Recruitment-Record-Ledger-Windows-x64.zip",
+        repository="wangtianyu-0403/Recruitment-Record-Ledger",
+    )
+
+    release = update.parse_release_payload(payload)
+
+    assert release.tag_name == "v1.1.2"
+    assert release.asset_url.endswith("/Recruitment-Record-Ledger-Windows-x64.zip")
+
+
 def test_parse_web_release_reads_exact_asset_and_digest() -> None:
     release = _parse_web_release(
         "https://github.com/wangtianyu-0403/"
-        "autumn-recruitment-ledger/releases/tag/v1.2.0",
+        "Recruitment-Record-Ledger/releases/tag/v1.2.0",
         _expanded_assets_html(),
     )
 
@@ -94,14 +118,14 @@ def test_parse_web_release_reads_exact_asset_and_digest() -> None:
         version=(1, 2, 0),
         tag_name="v1.2.0",
         asset_url=(
-            "https://github.com/wangtianyu-0403/autumn-recruitment-ledger/"
+            "https://github.com/wangtianyu-0403/Recruitment-Record-Ledger/"
             "releases/download/v1.2.0/"
-            "autumn-recruitment-ledger-Windows-x64.zip"
+            "Recruitment-Record-Ledger-Windows-x64.zip"
         ),
         asset_digest="sha256:" + "b" * 64,
         html_url=(
             "https://github.com/wangtianyu-0403/"
-            "autumn-recruitment-ledger/releases/tag/v1.2.0"
+            "Recruitment-Record-Ledger/releases/tag/v1.2.0"
         ),
     )
 
@@ -109,8 +133,8 @@ def test_parse_web_release_reads_exact_asset_and_digest() -> None:
 @pytest.mark.parametrize(
     "final_url",
     [
-        "http://github.com/wangtianyu-0403/autumn-recruitment-ledger/releases/tag/v1.2.0",
-        "https://example.com/wangtianyu-0403/autumn-recruitment-ledger/releases/tag/v1.2.0",
+        "http://github.com/wangtianyu-0403/Recruitment-Record-Ledger/releases/tag/v1.2.0",
+        "https://example.com/wangtianyu-0403/Recruitment-Record-Ledger/releases/tag/v1.2.0",
         "https://github.com/other/repository/releases/tag/v1.2.0",
     ],
 )
@@ -134,7 +158,7 @@ def test_parse_web_release_rejects_invalid_asset_metadata(
     with pytest.raises(UpdateError):
         _parse_web_release(
             "https://github.com/wangtianyu-0403/"
-            "autumn-recruitment-ledger/releases/tag/v1.2.0",
+            "Recruitment-Record-Ledger/releases/tag/v1.2.0",
             _expanded_assets_html(asset_name=asset_name, digest=digest),
         )
 
@@ -145,10 +169,50 @@ def test_fetch_latest_release_parses_valid_file_response(tmp_path: Path) -> None
     assert release == ReleaseInfo(
         version=(1, 2, 0),
         tag_name="v1.2.0",
-        asset_url="https://example.invalid/app.zip",
+        asset_url=(
+            "https://github.com/wangtianyu-0403/Recruitment-Record-Ledger/"
+            "releases/download/v1.2.0/"
+            "Recruitment-Record-Ledger-Windows-x64.zip"
+        ),
         asset_digest="sha256:" + "a" * 64,
-        html_url="https://github.com/example/releases/tag/v1.2.0",
+        html_url=(
+            "https://github.com/wangtianyu-0403/"
+            "Recruitment-Record-Ledger/releases/tag/v1.2.0"
+        ),
     )
+
+
+def test_fetch_latest_release_requests_renamed_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[tuple[str, str | None]] = []
+
+    class ApiResponse:
+        def __enter__(self) -> "ApiResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(release_payload(tag="v1.1.2")).encode("utf-8")
+
+    def open_api(request, timeout: float) -> ApiResponse:
+        requests.append((request.full_url, request.get_header("User-agent")))
+        return ApiResponse()
+
+    monkeypatch.setattr(update, "urlopen", open_api)
+
+    release = fetch_latest_release()
+
+    assert release.tag_name == "v1.1.2"
+    assert requests == [
+        (
+            "https://api.github.com/repos/"
+            "wangtianyu-0403/Recruitment-Record-Ledger/releases/latest",
+            "RecruitmentRecordLedger-Updater",
+        )
+    ]
 
 
 @pytest.mark.parametrize(("field", "value"), [("draft", True), ("prerelease", True)])
@@ -293,22 +357,22 @@ def _write_update_zip(path: Path, members: dict[str, bytes]) -> Path:
 
 def _valid_update_members() -> dict[str, bytes]:
     return {
-        "秋招进程台账/秋招进程台账.exe": b"new-exe",
-        "秋招进程台账/_internal/python314.dll": b"new-runtime",
-        "秋招进程台账/version.txt": b"new-version",
+        "招聘记录台账/招聘记录台账.exe": b"new-exe",
+        "招聘记录台账/_internal/python314.dll": b"new-runtime",
+        "招聘记录台账/version.txt": b"new-version",
     }
 
 
 def test_validate_update_archive_accepts_complete_package(tmp_path: Path) -> None:
     archive = _write_update_zip(tmp_path / "valid.zip", _valid_update_members())
 
-    validate_update_archive(archive)
+    assert validate_update_archive(archive) == archive
 
 
 def test_validate_update_archive_accepts_python313_runtime(tmp_path: Path) -> None:
     members = _valid_update_members()
-    members["秋招进程台账/_internal/python313.dll"] = members.pop(
-        "秋招进程台账/_internal/python314.dll"
+    members["招聘记录台账/_internal/python313.dll"] = members.pop(
+        "招聘记录台账/_internal/python314.dll"
     )
     archive = _write_update_zip(tmp_path / "python313.zip", members)
 
@@ -317,7 +381,7 @@ def test_validate_update_archive_accepts_python313_runtime(tmp_path: Path) -> No
 
 def test_validate_update_archive_requires_runtime(tmp_path: Path) -> None:
     members = _valid_update_members()
-    del members["秋招进程台账/_internal/python314.dll"]
+    del members["招聘记录台账/_internal/python314.dll"]
     archive = _write_update_zip(tmp_path / "missing-runtime.zip", members)
 
     with pytest.raises(UpdateError, match="运行时"):
@@ -338,9 +402,9 @@ def test_validate_update_archive_rejects_unsafe_paths(
 
 
 def test_generated_updater_replaces_install_and_keeps_backup(tmp_path: Path) -> None:
-    install_dir = tmp_path / "AutumnRecruitmentLedger"
+    install_dir = tmp_path / "RecruitmentRecordLedger"
     (install_dir / "_internal").mkdir(parents=True)
-    (install_dir / "秋招进程台账.exe").write_bytes(b"old-exe")
+    (install_dir / "招聘记录台账.exe").write_bytes(b"old-exe")
     (install_dir / "_internal" / "python313.dll").write_bytes(b"old-runtime")
     (install_dir / "version.txt").write_text("old-version", encoding="utf-8")
     archive = _write_update_zip(tmp_path / "update.zip", _valid_update_members())
@@ -362,7 +426,7 @@ def test_generated_updater_replaces_install_and_keeps_backup(tmp_path: Path) -> 
             "-InstallDir",
             str(install_dir),
             "-ExecutableName",
-            "秋招进程台账.exe",
+            "招聘记录台账.exe",
             "-LogPath",
             str(log_path),
             "-NoRestart",
@@ -375,7 +439,7 @@ def test_generated_updater_replaces_install_and_keeps_backup(tmp_path: Path) -> 
 
     assert result.returncode == 0, result.stderr
     assert (install_dir / "version.txt").read_text(encoding="utf-8") == "new-version"
-    backups = list(tmp_path.glob("AutumnRecruitmentLedger.backup-*"))
+    backups = list(tmp_path.glob("RecruitmentRecordLedger.backup-*"))
     assert len(backups) == 1
     assert (backups[0] / "version.txt").read_text(encoding="utf-8") == "old-version"
     assert "更新完成" in log_path.read_text(encoding="utf-8-sig")

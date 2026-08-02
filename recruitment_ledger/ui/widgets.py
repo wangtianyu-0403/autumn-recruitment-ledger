@@ -41,26 +41,42 @@ class ActionCell(QWidget):
     edit_requested = Signal(int)
     history_requested = Signal(int)
     delete_requested = Signal(int)
+    pin_requested = Signal(int, bool)
 
-    def __init__(self, application_id: int, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        application_id: int,
+        is_pinned: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(3, 2, 3, 2)
         layout.setSpacing(4)
-        edit_button = QPushButton("编辑")
-        history_button = QPushButton("历史")
-        delete_button = QPushButton("删除")
-        delete_button.setProperty("danger", True)
-        for button in (edit_button, history_button, delete_button):
+        self.pin_button = QPushButton("取消置顶" if is_pinned else "置顶")
+        self.edit_button = QPushButton("编辑")
+        self.history_button = QPushButton("历史")
+        self.delete_button = QPushButton("删除")
+        self.delete_button.setProperty("danger", True)
+        for button in (
+            self.pin_button,
+            self.edit_button,
+            self.history_button,
+            self.delete_button,
+        ):
             button.setMinimumWidth(46)
             button.setFocusPolicy(Qt.NoFocus)
             layout.addWidget(button)
-        edit_button.clicked.connect(
+        self.pin_button.setMinimumWidth(62)
+        self.pin_button.clicked.connect(
+            lambda: self.pin_requested.emit(application_id, not is_pinned)
+        )
+        self.edit_button.clicked.connect(
             lambda: self.edit_requested.emit(application_id)
         )
-        history_button.clicked.connect(
+        self.history_button.clicked.connect(
             lambda: self.history_requested.emit(application_id)
         )
-        delete_button.clicked.connect(
+        self.delete_button.clicked.connect(
             lambda: self.delete_requested.emit(application_id)
         )

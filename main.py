@@ -1,4 +1,4 @@
-from autumn_ledger.application import run
+from recruitment_ledger.application import run
 
 
 if __name__ == "__main__":

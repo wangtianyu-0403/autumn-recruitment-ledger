@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QPushButton,
-    QTableWidget,
     QTableWidgetItem,
     QToolBar,
     QVBoxLayout,
@@ -42,6 +41,7 @@ from ..export import (
 )
 from ..models import ApplicationRecord
 from ..paths import AppPaths
+from ..repository import SortMode
 from ..services import ApplicationService
 from ..update import (
     UpdateError,
@@ -52,9 +52,17 @@ from ..update import (
     validate_update_archive,
 )
 from .application_dialog import ApplicationDialog
+from .application_table import ApplicationTableWidget
 from .history_dialog import HistoryDialog
 from .recycle_bin_dialog import RecycleBinDialog
 from .widgets import ActionCell, StatisticCard
+
+
+SORT_MODE_LABELS = {
+    "手动排序": SortMode.MANUAL,
+    "按投递时间": SortMode.APPLICATION_DATE,
+    "按最后更新时间": SortMode.UPDATED_AT,
+}
 
 
 class MainWindow(QMainWindow):
@@ -106,7 +114,7 @@ class MainWindow(QMainWindow):
             cards.addWidget(card)
         layout.addLayout(cards)
 
-        self.table = QTableWidget(0, len(self.TABLE_HEADERS))
+        self.table = ApplicationTableWidget(0, len(self.TABLE_HEADERS))
         self.table.setObjectName("applications_table")
         self.table.setHorizontalHeaderLabels(self.TABLE_HEADERS)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -119,9 +127,10 @@ class MainWindow(QMainWindow):
             QHeaderView.ResizeMode.Interactive
         )
         self.table.horizontalHeader().setStretchLastSection(True)
-        for index, width in enumerate((155, 180, 95, 135, 105, 105, 90, 145, 190)):
+        for index, width in enumerate((155, 180, 95, 135, 105, 105, 90, 145, 230)):
             self.table.setColumnWidth(index, width)
         self.table.cellDoubleClicked.connect(self._edit_row)
+        self.table.rows_reordered.connect(self._rows_reordered)
         layout.addWidget(self.table)
 
         self.empty_label = QLabel("暂无岗位记录，点击“新增公司/岗位”开始记录。")
@@ -141,6 +150,7 @@ class MainWindow(QMainWindow):
         self.search_timer.timeout.connect(self.refresh_data)
         self.search_edit.textChanged.connect(lambda: self.search_timer.start())
         self.status_filter.currentTextChanged.connect(self.refresh_data)
+        self.sort_mode_combo.currentIndexChanged.connect(self.refresh_data)
 
     def _build_toolbar(self) -> None:
         toolbar = QToolBar("主工具栏")
@@ -165,6 +175,12 @@ class MainWindow(QMainWindow):
         self.status_filter.addItems(APPLICATION_STATUSES)
         self.status_filter.setMinimumWidth(125)
         toolbar.addWidget(self.status_filter)
+        self.sort_mode_combo = QComboBox()
+        self.sort_mode_combo.setObjectName("sort_mode_combo")
+        for label, mode in SORT_MODE_LABELS.items():
+            self.sort_mode_combo.addItem(label, mode.value)
+        self.sort_mode_combo.setMinimumWidth(130)
+        toolbar.addWidget(self.sort_mode_combo)
         for text, callback in (
             ("刷新", self.refresh_data),
             ("导出 CSV", self.export_current),
@@ -236,7 +252,7 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
 
         try:
-            update_dir = Path(tempfile.mkdtemp(prefix="autumn-ledger-download-"))
+            update_dir = Path(tempfile.mkdtemp(prefix="recruitment-ledger-download-"))
             archive_path = download_release_asset(
                 release,
                 update_dir / "update.zip",
@@ -269,16 +285,29 @@ class MainWindow(QMainWindow):
         index = self.status_filter.findText(status)
         if index >= 0:
             self.status_filter.setCurrentIndex(index)
+        saved_sort_mode = str(
+            self.settings.value("table/sort_mode", SortMode.UPDATED_AT.value)
+        )
+        valid_sort_modes = {mode.value for mode in SortMode}
+        if saved_sort_mode not in valid_sort_modes:
+            saved_sort_mode = SortMode.UPDATED_AT.value
+        sort_index = self.sort_mode_combo.findData(saved_sort_mode)
+        self.sort_mode_combo.setCurrentIndex(sort_index)
         widths = self.settings.value("table/column_widths")
         if isinstance(widths, list) and len(widths) == self.table.columnCount():
             for column, width in enumerate(widths):
                 self.table.setColumnWidth(column, int(width))
+        self.table.setColumnWidth(8, max(230, self.table.columnWidth(8)))
 
     def refresh_data(self) -> None:
         selected = self.status_filter.currentText()
         status = None if selected == "全部状态" else selected
         try:
-            self._records = self.service.list(self.search_edit.text().strip(), status)
+            self._records = self.service.list(
+                self.search_edit.text().strip(),
+                status,
+                self._current_sort_mode(),
+            )
             self._populate_table()
             self._refresh_statistics()
             self.statusBar().showMessage(f"共显示 {len(self._records)} 条记录", 3000)
@@ -292,10 +321,17 @@ class MainWindow(QMainWindow):
 
     def _populate_table(self) -> None:
         self.table.setUpdatesEnabled(False)
-        self.table.setRowCount(len(self._records))
+        self.table.set_application_ids(
+            [record.id for record in self._records if record.id is not None]
+        )
         for row, record in enumerate(self._records):
+            company_display = (
+                f"📌 {record.company_name}"
+                if record.is_pinned
+                else record.company_name
+            )
             for column, value in (
-                (0, record.company_name),
+                (0, company_display),
                 (1, record.position_name),
                 (2, record.application_date),
                 (4, record.location or "—"),
@@ -359,11 +395,43 @@ class MainWindow(QMainWindow):
     def _add_action_cell(self, row: int, record: ApplicationRecord) -> None:
         if record.id is None:
             return
-        actions = ActionCell(record.id)
+        actions = ActionCell(record.id, record.is_pinned)
+        actions.pin_requested.connect(self._set_pinned)
         actions.edit_requested.connect(self.edit_application)
         actions.history_requested.connect(self.show_history)
         actions.delete_requested.connect(self.delete_application)
         self.table.setCellWidget(row, 8, actions)
+
+    def _current_sort_mode(self) -> SortMode:
+        try:
+            return SortMode(self.sort_mode_combo.currentData())
+        except (TypeError, ValueError):
+            return SortMode.UPDATED_AT
+
+    def _rows_reordered(self, application_ids: list[int]) -> None:
+        previous_mode = self._current_sort_mode()
+        try:
+            self.service.reorder_visible(application_ids, previous_mode)
+        except Exception as exc:
+            QMessageBox.critical(self, "排序失败", f"无法保存岗位顺序：{exc}")
+            self.refresh_data()
+            return
+
+        if previous_mode is not SortMode.MANUAL:
+            manual_index = self.sort_mode_combo.findData(SortMode.MANUAL.value)
+            self.sort_mode_combo.blockSignals(True)
+            self.sort_mode_combo.setCurrentIndex(manual_index)
+            self.sort_mode_combo.blockSignals(False)
+        self.refresh_data()
+
+    def _set_pinned(self, application_id: int, pinned: bool) -> None:
+        try:
+            self.service.set_pinned(application_id, pinned)
+        except Exception as exc:
+            QMessageBox.critical(self, "置顶失败", f"无法修改岗位置顶状态：{exc}")
+            self.refresh_data()
+            return
+        self.refresh_data()
 
     def _edit_row(self, row: int, column: int) -> None:
         del column
@@ -438,7 +506,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "导出失败", str(exc))
 
     def manual_backup(self) -> None:
-        filename = f"autumn_recruitment_manual_{datetime.now():%Y%m%d_%H%M%S}.db"
+        filename = f"recruitment_record_manual_{datetime.now():%Y%m%d_%H%M%S}.db"
         selected, _ = QFileDialog.getSaveFileName(
             self,
             "备份数据库",
@@ -495,6 +563,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         self.settings.setValue("window/geometry", self.saveGeometry())
         self.settings.setValue("filters/status", self.status_filter.currentText())
+        self.settings.setValue("table/sort_mode", self._current_sort_mode().value)
         self.settings.setValue(
             "table/column_widths",
             [self.table.columnWidth(i) for i in range(self.table.columnCount())],

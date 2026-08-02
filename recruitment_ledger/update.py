@@ -17,18 +17,18 @@ from urllib.request import Request, urlopen
 
 LATEST_RELEASE_API = (
     "https://api.github.com/repos/"
-    "wangtianyu-0403/autumn-recruitment-ledger/releases/latest"
+    "wangtianyu-0403/Recruitment-Record-Ledger/releases/latest"
 )
-WINDOWS_ASSET_NAME = "autumn-recruitment-ledger-Windows-x64.zip"
+WINDOWS_ASSET_NAME = "Recruitment-Record-Ledger-Windows-x64.zip"
 GITHUB_WEB_ORIGIN = "https://github.com"
-REPOSITORY_WEB_PATH = "/wangtianyu-0403/autumn-recruitment-ledger"
+REPOSITORY_WEB_PATH = "/wangtianyu-0403/Recruitment-Record-Ledger"
 LATEST_RELEASE_WEB = f"{GITHUB_WEB_ORIGIN}{REPOSITORY_WEB_PATH}/releases/latest"
 EXPANDED_ASSETS_WEB = (
     f"{GITHUB_WEB_ORIGIN}{REPOSITORY_WEB_PATH}/releases/expanded_assets/{{tag}}"
 )
-USER_AGENT = "AutumnRecruitmentLedger-Updater"
-UPDATE_ROOT_NAME = "秋招进程台账"
-UPDATE_EXECUTABLE_NAME = "秋招进程台账.exe"
+USER_AGENT = "RecruitmentRecordLedger-Updater"
+UPDATE_ROOT_NAME = "招聘记录台账"
+UPDATE_EXECUTABLE_NAME = "招聘记录台账.exe"
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
@@ -65,6 +65,47 @@ def _validate_asset_digest(value: object) -> str:
     except ValueError as exc:
         raise UpdateError("Windows 更新包的 SHA-256 校验值无效。") from exc
     return value.lower()
+
+
+def parse_release_payload(payload: object) -> ReleaseInfo:
+    if not isinstance(payload, dict):
+        raise UpdateError("GitHub 更新信息格式无效。")
+    if payload.get("draft") is True or payload.get("prerelease") is True:
+        raise UpdateError("GitHub 最新版本不是正式发布版本。")
+
+    tag_name = payload.get("tag_name")
+    html_url = payload.get("html_url")
+    assets = payload.get("assets")
+    if not isinstance(tag_name, str) or not isinstance(html_url, str):
+        raise UpdateError("GitHub 更新信息缺少版本或发布地址。")
+    if not isinstance(assets, list):
+        raise UpdateError("GitHub 更新信息缺少附件列表。")
+
+    asset = next(
+        (
+            candidate
+            for candidate in assets
+            if isinstance(candidate, dict)
+            and candidate.get("name") == WINDOWS_ASSET_NAME
+        ),
+        None,
+    )
+    if asset is None:
+        raise UpdateError(f"最新版本中未找到 Windows 更新包：{WINDOWS_ASSET_NAME}")
+
+    asset_url = asset.get("browser_download_url")
+    asset_digest = asset.get("digest")
+    if not isinstance(asset_url, str) or not asset_url:
+        raise UpdateError("Windows 更新包缺少下载地址。")
+    validated_digest = _validate_asset_digest(asset_digest)
+
+    return ReleaseInfo(
+        version=parse_version(tag_name),
+        tag_name=tag_name,
+        asset_url=asset_url,
+        asset_digest=validated_digest,
+        html_url=html_url,
+    )
 
 
 class _ExpandedAssetsParser(HTMLParser):
@@ -188,44 +229,7 @@ def fetch_latest_release(
     except (URLError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise UpdateError(f"无法读取 GitHub 更新信息：{exc}") from exc
 
-    if not isinstance(payload, dict):
-        raise UpdateError("GitHub 更新信息格式无效。")
-    if payload.get("draft") is True or payload.get("prerelease") is True:
-        raise UpdateError("GitHub 最新版本不是正式发布版本。")
-
-    tag_name = payload.get("tag_name")
-    html_url = payload.get("html_url")
-    assets = payload.get("assets")
-    if not isinstance(tag_name, str) or not isinstance(html_url, str):
-        raise UpdateError("GitHub 更新信息缺少版本或发布地址。")
-    if not isinstance(assets, list):
-        raise UpdateError("GitHub 更新信息缺少附件列表。")
-
-    asset = next(
-        (
-            candidate
-            for candidate in assets
-            if isinstance(candidate, dict)
-            and candidate.get("name") == WINDOWS_ASSET_NAME
-        ),
-        None,
-    )
-    if asset is None:
-        raise UpdateError(f"最新版本中未找到 Windows 更新包：{WINDOWS_ASSET_NAME}")
-
-    asset_url = asset.get("browser_download_url")
-    asset_digest = asset.get("digest")
-    if not isinstance(asset_url, str) or not asset_url:
-        raise UpdateError("Windows 更新包缺少下载地址。")
-    validated_digest = _validate_asset_digest(asset_digest)
-
-    return ReleaseInfo(
-        version=parse_version(tag_name),
-        tag_name=tag_name,
-        asset_url=asset_url,
-        asset_digest=validated_digest,
-        html_url=html_url,
-    )
+    return parse_release_payload(payload)
 
 
 def download_release_asset(
@@ -266,7 +270,7 @@ def download_release_asset(
     return resolved
 
 
-def validate_update_archive(archive_path: Path) -> None:
+def validate_update_archive(archive_path: Path) -> Path:
     try:
         with zipfile.ZipFile(archive_path) as archive:
             normalized_names: set[str] = set()
@@ -291,6 +295,7 @@ def validate_update_archive(archive_path: Path) -> None:
     )
     if not any(runtime_pattern.fullmatch(name) for name in normalized_names):
         raise UpdateError("更新包缺少 Python 运行时。")
+    return archive_path
 
 
 UPDATER_SCRIPT = r"""param(
@@ -325,8 +330,8 @@ try {
 
     New-Item -ItemType Directory -Force -Path $staging | Out-Null
     Expand-Archive -LiteralPath $ArchivePath -DestinationPath $staging
-    $newRoot = Join-Path $staging "秋招进程台账"
-    $newExe = Join-Path $newRoot $ExecutableName
+    $newRoot = Join-Path $staging "招聘记录台账"
+    $newExe = Join-Path $newRoot "招聘记录台账.exe"
     $newRuntimes = @(
         Get-ChildItem -File -LiteralPath (Join-Path $newRoot "_internal") `
             -Filter "python3*.dll" -ErrorAction SilentlyContinue |
@@ -345,7 +350,7 @@ try {
     Move-Item -LiteralPath $newRoot -Destination $InstallDir
 
     if (-not $NoRestart) {
-        Start-Process -FilePath (Join-Path $InstallDir $ExecutableName) `
+        Start-Process -FilePath (Join-Path $InstallDir "招聘记录台账.exe") `
             -WorkingDirectory $InstallDir
     }
     Write-UpdateLog "更新完成。旧版本备份：$backup"
@@ -378,7 +383,7 @@ def launch_updater(
     executable_path: Path,
 ) -> Path:
     validate_update_archive(archive_path)
-    update_dir = Path(tempfile.mkdtemp(prefix="autumn-ledger-update-"))
+    update_dir = Path(tempfile.mkdtemp(prefix="recruitment-ledger-update-"))
     script_path = write_updater_script(update_dir / "apply-update.ps1")
     log_path = update_dir / "update.log"
     command = [

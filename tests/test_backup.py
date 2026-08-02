@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from autumn_ledger.backup import BackupError, BackupManager
-from autumn_ledger.database import Database
-from autumn_ledger.models import ApplicationRecord
-from autumn_ledger.paths import AppPaths
-from autumn_ledger.repository import ApplicationRepository
+from recruitment_ledger.backup import BackupError, BackupManager
+from recruitment_ledger.database import Database
+from recruitment_ledger.models import ApplicationRecord
+from recruitment_ledger.paths import AppPaths
+from recruitment_ledger.repository import ApplicationRepository
 
 
 def test_create_backup_contains_data(
@@ -34,7 +34,30 @@ def test_auto_backup_cleanup_keeps_thirty(
     base = datetime(2026, 1, 1)
     for day in range(35):
         manager.create_daily_backup(base + timedelta(days=day))
-    assert len(list(app_paths.backups_dir.glob("autumn_recruitment_????????.db"))) == 30
+    assert len(list(app_paths.backups_dir.glob("recruitment_record_????????.db"))) == 30
+
+
+def test_cleanup_counts_old_and_new_daily_backups_together(
+    database: Database, app_paths: AppPaths
+) -> None:
+    manager = BackupManager(database, app_paths)
+    base = datetime(2026, 1, 1)
+    for day in range(20):
+        date = base + timedelta(days=day)
+        (app_paths.backups_dir / f"autumn_recruitment_{date:%Y%m%d}.db").write_bytes(
+            b"legacy"
+        )
+        (app_paths.backups_dir / f"recruitment_record_{date:%Y%m%d}.db").write_bytes(
+            b"current"
+        )
+
+    manager.cleanup_auto_backups(max_count=30)
+
+    assert len(list(app_paths.backups_dir.glob("*.db"))) == 30
+
+
+def test_paths_use_renamed_log_filename(app_paths: AppPaths) -> None:
+    assert app_paths.log_path.name == "recruitment_ledger.log"
 
 
 def test_invalid_restore_file_is_rejected(
@@ -68,4 +91,3 @@ def test_restore_replaces_database(
     BackupManager(database, app_paths).restore_database(other_path)
     records = repository.list_applications()
     assert [record.company_name for record in records] == ["新公司"]
-

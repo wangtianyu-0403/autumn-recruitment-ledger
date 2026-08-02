@@ -12,6 +12,6 @@ fi
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 rm -rf "$PROJECT_DIR/build" "$PROJECT_DIR/dist"
 .venv/bin/python -m PyInstaller \
-    --noconfirm --clean --windowed --onedir \
-    --name "秋招进程台账" main.py
-printf '打包完成：%s\n' "$PROJECT_DIR/dist/秋招进程台账"
+    --noconfirm --clean --onedir --windowed \
+    --icon "assets/ui.ico" --name "招聘记录台账" main.py
+printf '打包完成：%s\n' "$PROJECT_DIR/dist/招聘记录台账"

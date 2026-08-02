@@ -6,6 +6,11 @@ from pathlib import Path
 from PySide6.QtCore import QStandardPaths
 
 
+def legacy_data_root(new_root: Path) -> Path:
+    """Return the previous application-data directory beside ``new_root``."""
+    return new_root.expanduser().resolve().parent / "AutumnRecruitmentLedger"
+
+
 @dataclass(frozen=True, slots=True)
 class AppPaths:
     root: Path
@@ -24,6 +29,10 @@ class AppPaths:
         return cls.from_root(Path(location))
 
     @classmethod
+    def legacy_root_from_standard_paths(cls) -> Path:
+        return legacy_data_root(cls.from_standard_paths().root)
+
+    @classmethod
     def from_root(cls, root: Path) -> "AppPaths":
         resolved = root.expanduser().resolve()
         data_dir = resolved / "data"
@@ -35,7 +44,7 @@ class AppPaths:
             backups_dir=resolved / "backups",
             exports_dir=resolved / "exports",
             logs_dir=logs_dir,
-            log_path=logs_dir / "autumn_ledger.log",
+            log_path=logs_dir / "recruitment_ledger.log",
         )
 
     def ensure_directories(self) -> None:
@@ -47,4 +56,3 @@ class AppPaths:
             self.logs_dir,
         ):
             directory.mkdir(parents=True, exist_ok=True)
-

@@ -1,9 +1,9 @@
-# 秋招进程台账开发规范
+# 招聘记录台账开发规范
 
 ## 项目边界
 
-- 项目名:`autumn-recruitment-ledger`
-- Python 包:`autumn_ledger`
+- 项目名:`Recruitment-Record-Ledger`
+- Python 包:`recruitment_ledger`
 - 技术栈:Python 3.10+、PySide6、SQLite、pytest、pytest-qt、PyInstaller。
 - 程序完全离线,业务数据只保存在本地 SQLite 数据库。
 - 禁止加入登录、云同步、在线 API、多人协作或需求外复杂功能。
@@ -35,4 +35,3 @@
 - GUI 使用 `QT_QPA_PLATFORM=offscreen` 做可重复冒烟测试。
 - Windows 打包前测试必须通过;使用 PyInstaller `--onedir --windowed`。
 - README 中只记录已经实际验证的命令。
-

@@ -9,6 +9,8 @@ htmlcov/
 build/
 dist/
 *.spec
+!招聘记录台账.spec
+!招聘记录台账-debug.spec
 *.db
 *.db-shm
 *.db-wal

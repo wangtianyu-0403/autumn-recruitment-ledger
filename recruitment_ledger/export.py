@@ -38,7 +38,7 @@ CSV_HEADERS: tuple[tuple[str, str], ...] = (
 
 def default_export_filename(now: datetime | None = None) -> str:
     current = now or datetime.now()
-    return f"秋招台账_{current:%Y%m%d_%H%M%S}.csv"
+    return f"招聘记录台账_{current:%Y%m%d_%H%M%S}.csv"
 
 
 def export_applications_to_csv(
@@ -63,4 +63,3 @@ def export_applications_to_csv(
         return target
     except OSError as exc:
         raise ExportError(f"无法写入CSV文件:{exc}") from exc
-

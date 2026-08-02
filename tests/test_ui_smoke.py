@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QSettings, Qt
+from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialogButtonBox, QMessageBox, QWidget
 
 from recruitment_ledger.backup import BackupManager
 from recruitment_ledger.constants import APPLICATION_STATUSES
@@ -46,13 +47,29 @@ def _visible_companies(window: MainWindow) -> list[str]:
     return [window.table.item(row, 0).text() for row in range(window.table.rowCount())]
 
 
+def _make_wheel_event(widget: QWidget, angle_delta_y: int) -> QWheelEvent:
+    position = widget.rect().center()
+    return QWheelEvent(
+        QPointF(position),
+        QPointF(widget.mapToGlobal(position)),
+        QPoint(),
+        QPoint(0, angle_delta_y),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+
+
 def test_status_wheel_scrolls_table_without_changing_business_state(
     qtbot, monkeypatch, tmp_path, service, app_paths, database, repository
 ) -> None:
     _isolated_settings(monkeypatch, tmp_path)
-    for number in range(30):
+    for number in range(20):
         _create_record(service, f"scroll record {number}", "2026-01-02")
     application_id = _create_record(service, "wheel target", "2026-01-01")
+    for number in range(20, 30):
+        _create_record(service, f"scroll record {number}", "2026-01-02")
     original = service.get(application_id)
     assert original is not None
     original_status = original.status
@@ -62,8 +79,19 @@ def test_status_wheel_scrolls_table_without_changing_business_state(
     qtbot.addWidget(window)
     window.show()
     QApplication.processEvents()
-    combo = window.table.cellWidget(0, 3)
+    target_row = next(
+        row for row, record in enumerate(window._records) if record.id == application_id
+    )
+    assert window._records[target_row].id == application_id
+    window.table.scrollToItem(
+        window.table.item(target_row, 0),
+        QAbstractItemView.ScrollHint.PositionAtCenter,
+    )
+    QApplication.processEvents()
+    combo = window.table.cellWidget(target_row, 3)
+    assert combo is not None
     original_scroll_value = window.table.verticalScrollBar().value()
+    assert window.table.verticalScrollBar().maximum() > original_scroll_value
 
     QTest.wheelEvent(
         window.windowHandle(),
@@ -89,18 +117,36 @@ def test_open_status_popup_still_allows_explicit_selection(
     qtbot.addWidget(window)
     window.show()
     combo = window.table.cellWidget(0, 3)
+    assert combo is not None
     original_history_count = len(repository.list_status_history(application_id))
-    target_index = combo.findText(APPLICATION_STATUSES[0])
+    target_index = combo.findText(APPLICATION_STATUSES[4])
     assert target_index != combo.currentIndex()
 
+    combo.addItems([f"popup scroll option {number}" for number in range(40)])
+    combo.setMaxVisibleItems(3)
+    combo.view().setFixedHeight(72)
     combo.showPopup()
-    popup_index = combo.model().index(target_index, 0)
-    qtbot.mouseClick(
-        combo.view().viewport(),
-        Qt.MouseButton.LeftButton,
-        pos=combo.view().visualRect(popup_index).center(),
+    QApplication.processEvents()
+    popup_view = combo.view()
+    popup_scrollbar = popup_view.verticalScrollBar()
+    original_popup_scroll_value = popup_scrollbar.value()
+    assert popup_scrollbar.maximum() > original_popup_scroll_value
+    popup_viewport = popup_view.viewport()
+    QApplication.sendEvent(
+        popup_viewport,
+        _make_wheel_event(popup_viewport, angle_delta_y=-120),
     )
-    qtbot.waitUntil(lambda: service.get(application_id).status == APPLICATION_STATUSES[0])
+    QApplication.processEvents()
+    assert popup_scrollbar.value() > original_popup_scroll_value
+
+    popup_index = combo.model().index(target_index, 0)
+    popup_view.scrollTo(popup_index, QAbstractItemView.ScrollHint.PositionAtCenter)
+    qtbot.mouseClick(
+        popup_viewport,
+        Qt.MouseButton.LeftButton,
+        pos=popup_view.visualRect(popup_index).center(),
+    )
+    qtbot.waitUntil(lambda: service.get(application_id).status == APPLICATION_STATUSES[4])
 
     assert len(repository.list_status_history(application_id)) == original_history_count + 1
 

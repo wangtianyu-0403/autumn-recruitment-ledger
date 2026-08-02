@@ -6,6 +6,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT_PATH = Path("scripts/sync_local_windows.ps1").resolve()
 
@@ -400,6 +402,40 @@ def test_shortcut_save_failure_restores_existing_install_and_shortcut(
     finally:
         if shortcut.exists():
             shortcut.chmod(stat.S_IWRITE)
+
+
+@pytest.mark.parametrize(
+    ("marker_name", "marker_content"),
+    [
+        pytest.param(None, None, id="empty-directory"),
+        pytest.param(
+            "keep.txt", "preexisting directory content", id="nonempty-directory"
+        ),
+    ],
+)
+def test_preexisting_shortcut_directory_is_never_removed_or_modified(
+    tmp_path: Path, marker_name: str | None, marker_content: str | None
+) -> None:
+    install_dir = _make_distribution(tmp_path / "installed", "original")
+    source_dist = _make_distribution(tmp_path / "new-dist", "replacement")
+    desktop_dir = tmp_path / "Desktop"
+    desktop_dir.mkdir()
+    shortcut_path = desktop_dir / "招聘记录台账.lnk"
+    shortcut_path.mkdir()
+    if marker_name is not None and marker_content is not None:
+        (shortcut_path / marker_name).write_text(marker_content, encoding="utf-8")
+
+    result = _run_sync(install_dir, desktop_dir, source_dist)
+
+    output = "".join(f"{result.stdout}\n{result.stderr}".split())
+    assert result.returncode != 0
+    assert "桌面快捷方式路径不是普通文件，无法安全更新。" in output
+    assert shortcut_path.is_dir()
+    if marker_name is None:
+        assert list(shortcut_path.iterdir()) == []
+    else:
+        assert (shortcut_path / marker_name).read_text(encoding="utf-8") == marker_content
+    assert (install_dir / "version.txt").read_text(encoding="utf-8") == "original"
 
 
 def test_wrong_window_title_restores_existing_install_and_shortcut(

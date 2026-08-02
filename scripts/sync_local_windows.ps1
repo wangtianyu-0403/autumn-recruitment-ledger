@@ -201,14 +201,18 @@ try {
     $shortcutBackup = Join-Path $DesktopDir ".招聘记录台账.rollback-$stamp.lnk"
     $backupCreated = $false
     $newInstallActivated = $false
-    $shortcutExisted = Test-Path -LiteralPath $shortcutPath -PathType Leaf
+    $shortcutPathExisted = Test-Path -LiteralPath $shortcutPath
+    $shortcutFileExisted = $shortcutPathExisted -and (
+        Test-Path -LiteralPath $shortcutPath -PathType Leaf
+    )
     $shortcutBackupCreated = $false
+    $shortcutCreatedByTransaction = $false
     $launchedProcess = $null
     $launchVerified = $false
     $transactionCommitted = $false
     try {
-        if (Test-Path -LiteralPath $shortcutPath) {
-            if (-not $shortcutExisted) {
+        if ($shortcutPathExisted) {
+            if (-not $shortcutFileExisted) {
                 throw "桌面快捷方式路径不是普通文件，无法安全更新。"
             }
             Copy-Item -Force -LiteralPath $shortcutPath -Destination $shortcutBackup
@@ -245,6 +249,9 @@ try {
         $shortcut.WorkingDirectory = $InstallDir
         $shortcut.IconLocation = "$($shortcut.TargetPath),0"
         $shortcut.Save()
+        if (-not $shortcutPathExisted) {
+            $shortcutCreatedByTransaction = $true
+        }
 
         if (-not $NoLaunch) {
             $launchedProcess = Start-Process -FilePath $installedExe `
@@ -280,7 +287,7 @@ try {
         if ($backupCreated -and (Test-Path -LiteralPath $backup)) {
             Move-Item -LiteralPath $backup -Destination $InstallDir
         }
-        if ($shortcutExisted) {
+        if ($shortcutFileExisted) {
             if ($shortcutBackupCreated) {
                 if (Test-Path -LiteralPath $shortcutPath) {
                     Remove-Item -Force -LiteralPath $shortcutPath
@@ -289,7 +296,10 @@ try {
                 $shortcutBackupCreated = $false
             }
         }
-        elseif (Test-Path -LiteralPath $shortcutPath) {
+        elseif (
+            $shortcutCreatedByTransaction `
+            -and (Test-Path -LiteralPath $shortcutPath -PathType Leaf)
+        ) {
             Remove-Item -Force -LiteralPath $shortcutPath
         }
         if (Test-Path -LiteralPath $staging) {

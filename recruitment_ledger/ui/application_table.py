@@ -32,6 +32,7 @@ class ApplicationTableWidget(QTableWidget):
         self.setRowCount(len(self._application_ids))
 
     def apply_row_move(self, source_row: int, destination_row: int) -> bool:
+        """Publish a logical move; the signal consumer rebuilds the owned row widgets."""
         row_count = len(self._application_ids)
         if (
             row_count != self.rowCount()
@@ -41,25 +42,8 @@ class ApplicationTableWidget(QTableWidget):
         ):
             return False
 
-        items = [self.takeItem(source_row, column) for column in range(self.columnCount())]
-        widgets = [self.cellWidget(source_row, column) for column in range(self.columnCount())]
-        for column, widget in enumerate(widgets):
-            if widget is not None:
-                self.removeCellWidget(source_row, column)
-
         application_id = self._application_ids.pop(source_row)
-        self.removeRow(source_row)
-        self.insertRow(destination_row)
         self._application_ids.insert(destination_row, application_id)
-
-        for column, item in enumerate(items):
-            if item is not None:
-                self.setItem(destination_row, column, item)
-        for column, widget in enumerate(widgets):
-            if widget is not None:
-                self.setCellWidget(destination_row, column, widget)
-
-        self.selectRow(destination_row)
         self.rows_reordered.emit(list(self._application_ids))
         return True
 

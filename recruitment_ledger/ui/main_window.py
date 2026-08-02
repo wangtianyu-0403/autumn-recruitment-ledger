@@ -119,7 +119,7 @@ class MainWindow(QMainWindow):
             QHeaderView.ResizeMode.Interactive
         )
         self.table.horizontalHeader().setStretchLastSection(True)
-        for index, width in enumerate((155, 180, 95, 135, 105, 105, 90, 145, 190)):
+        for index, width in enumerate((155, 180, 95, 135, 105, 105, 90, 145, 230)):
             self.table.setColumnWidth(index, width)
         self.table.cellDoubleClicked.connect(self._edit_row)
         layout.addWidget(self.table)
@@ -273,6 +273,7 @@ class MainWindow(QMainWindow):
         if isinstance(widths, list) and len(widths) == self.table.columnCount():
             for column, width in enumerate(widths):
                 self.table.setColumnWidth(column, int(width))
+        self.table.setColumnWidth(8, max(230, self.table.columnWidth(8)))
 
     def refresh_data(self) -> None:
         selected = self.status_filter.currentText()

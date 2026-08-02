@@ -35,6 +35,9 @@ def test_main_window_contains_required_controls(
     assert window.search_edit.placeholderText()
     assert window.status_filter.itemText(0) == "全部状态"
     assert window.table.rowCount() == 1
+    action_cell = window.table.cellWidget(0, 8)
+    assert window.table.columnWidth(8) >= 230
+    assert window.table.columnWidth(8) >= action_cell.minimumSizeHint().width()
     assert window.version_label.objectName() == "versionLabel"
     assert window.version_label.text() == "版本v1.1.2"
     assert window.statusBar().isAncestorOf(window.version_label)

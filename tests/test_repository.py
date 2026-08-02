@@ -33,6 +33,18 @@ def test_create_read_and_initial_history(repository: ApplicationRepository) -> N
     assert history[0].new_status == "已投递"
 
 
+def test_loaded_application_has_default_ordering_fields(
+    repository: ApplicationRepository,
+) -> None:
+    application_id = repository.create_application(make_record())
+
+    loaded = repository.get_application(application_id)
+
+    assert loaded is not None
+    assert loaded.is_pinned is False
+    assert loaded.manual_order == 0
+
+
 def test_update_information_and_status_history(repository: ApplicationRepository) -> None:
     application_id = repository.create_application(make_record())
     loaded = repository.get_application(application_id)

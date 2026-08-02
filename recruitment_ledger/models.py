@@ -24,6 +24,8 @@ class ApplicationRecord:
     created_at: str = ""
     updated_at: str = ""
     is_deleted: bool = False
+    is_pinned: bool = False
+    manual_order: int = 0
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "ApplicationRecord":
@@ -46,6 +48,8 @@ class ApplicationRecord:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             is_deleted=bool(row["is_deleted"]),
+            is_pinned=bool(row["is_pinned"]),
+            manual_order=int(row["manual_order"]),
         )
 
 
@@ -68,4 +72,3 @@ class StatusHistoryRecord:
             changed_at=row["changed_at"],
             notes=row["notes"],
         )
-

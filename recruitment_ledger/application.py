@@ -34,12 +34,23 @@ def run() -> int:
 
     database: Database | None = None
     old_root: Path | None = None
+    old_database_path: Path | None = None
     try:
         paths = AppPaths.from_standard_paths()
         old_root = legacy_data_root(paths.root)
-        migrate_legacy_data(paths, old_root)
+        old_database_path = AppPaths.from_root(old_root).database_path
+        migration_performed = migrate_legacy_data(paths, old_root)
         paths.ensure_directories()
         configure_logging(paths.log_path)
+        if (
+            not migration_performed
+            and paths.database_path.exists()
+            and old_database_path.exists()
+        ):
+            logging.getLogger(__name__).info(
+                "新数据库已存在，跳过旧数据迁移；旧数据库保持不变：%s",
+                old_database_path,
+            )
         database = Database(paths.database_path)
         database.initialize()
         service = ApplicationService(ApplicationRepository(database))
@@ -61,12 +72,16 @@ def run() -> int:
         return 0
     except DataMigrationError as exc:
         logging.getLogger(__name__).exception("程序启动失败")
-        source_path = str(old_root) if old_root is not None else "旧数据目录"
+        source_path = (
+            str(old_database_path)
+            if old_database_path is not None
+            else "旧数据库路径"
+        )
         QMessageBox.critical(
             None,
             "启动失败",
             (
-                f"{APP_DISPLAY_NAME}无法启动：从旧数据目录“{source_path}”迁移失败。"
+                f"{APP_DISPLAY_NAME}无法启动：从旧数据库“{source_path}”迁移失败。"
                 f"旧数据已保留，未被删除或覆盖：{exc}"
             ),
         )

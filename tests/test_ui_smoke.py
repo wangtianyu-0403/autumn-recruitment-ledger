@@ -92,6 +92,7 @@ def test_automatic_drag_switches_to_manual_and_rebuilds_visible_rows(
     assert window.table.apply_row_move(0, 1)
 
     assert window.sort_mode_combo.currentData() == SortMode.MANUAL.value
+    qtbot.waitUntil(lambda: not window._table_refresh_timer.isActive())
     assert [record.id for record in window._records] == [older_id, newer_id]
     assert _visible_companies(window) == ["较早公司", "较晚公司"]
 
@@ -136,8 +137,59 @@ def test_failed_drag_reports_error_and_restores_database_order(
     window._rows_reordered([first_id, second_id])
 
     assert window.sort_mode_combo.currentData() == SortMode.UPDATED_AT.value
+    qtbot.waitUntil(lambda: not window._table_refresh_timer.isActive())
     assert _visible_companies(window) == original
     assert errors and "排序" in errors[0][0]
+
+
+def test_drag_refresh_runs_after_native_move_cleanup(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    first = _create_record(service, "甲公司", "2026-01-01")
+    second = _create_record(service, "乙公司", "2026-01-02")
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    window.sort_mode_combo.setCurrentIndex(
+        window.sort_mode_combo.findData(SortMode.MANUAL.value)
+    )
+
+    window._rows_reordered([first, second])
+    for column in (0, 1, 2, 4, 5, 7):
+        window.table.takeItem(0, column)
+
+    qtbot.waitUntil(lambda: window.table.item(0, 0) is not None)
+
+    assert all(window.table.item(0, column) is not None for column in (0, 1, 2, 4, 5, 7))
+    assert window.table.cellWidget(0, 3) is not None
+    assert window.table.cellWidget(0, 6) is not None
+    assert window.table.cellWidget(0, 8) is not None
+
+
+def test_failed_drag_queues_refresh_after_native_move_cleanup(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    first = _create_record(service, "甲公司", "2026-01-01")
+    second = _create_record(service, "乙公司", "2026-01-02")
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    original_ids = [record.id for record in window._records]
+    monkeypatch.setattr(
+        service,
+        "reorder_visible",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args: None)
+
+    window._rows_reordered([second, first])
+    for column in (0, 1, 2, 4, 5, 7):
+        window.table.takeItem(0, column)
+
+    qtbot.waitUntil(lambda: window.table.item(0, 0) is not None)
+
+    assert [record.id for record in window._records] == original_ids
+    assert all(window.table.item(0, column) is not None for column in (0, 1, 2, 4, 5, 7))
 
 
 def test_pin_action_keeps_timestamp_and_refreshes_marker_and_button(

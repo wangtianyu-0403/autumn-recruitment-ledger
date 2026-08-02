@@ -91,6 +91,9 @@ class MainWindow(QMainWindow):
         self.settings = QSettings()
         self._records: list[ApplicationRecord] = []
         self._build_ui()
+        self._table_refresh_timer = QTimer(self)
+        self._table_refresh_timer.setSingleShot(True)
+        self._table_refresh_timer.timeout.connect(self.refresh_data)
         self._restore_settings()
         self.refresh_data()
 
@@ -408,13 +411,16 @@ class MainWindow(QMainWindow):
         except (TypeError, ValueError):
             return SortMode.UPDATED_AT
 
+    def _queue_table_refresh(self) -> None:
+        self._table_refresh_timer.start(0)
+
     def _rows_reordered(self, application_ids: list[int]) -> None:
         previous_mode = self._current_sort_mode()
         try:
             self.service.reorder_visible(application_ids, previous_mode)
         except Exception as exc:
             QMessageBox.critical(self, "排序失败", f"无法保存岗位顺序：{exc}")
-            self.refresh_data()
+            self._queue_table_refresh()
             return
 
         if previous_mode is not SortMode.MANUAL:
@@ -422,7 +428,7 @@ class MainWindow(QMainWindow):
             self.sort_mode_combo.blockSignals(True)
             self.sort_mode_combo.setCurrentIndex(manual_index)
             self.sort_mode_combo.blockSignals(False)
-        self.refresh_data()
+        self._queue_table_refresh()
 
     def _set_pinned(self, application_id: int, pinned: bool) -> None:
         try:

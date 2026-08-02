@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -9,6 +11,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class StatusComboBox(QComboBox):
+    """A status selector that cannot be changed by an accidental closed-state wheel."""
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        event.ignore()
 
 
 class StatisticCard(QWidget):

@@ -55,7 +55,7 @@ from .application_dialog import ApplicationDialog
 from .application_table import ApplicationTableWidget
 from .history_dialog import HistoryDialog
 from .recycle_bin_dialog import RecycleBinDialog
-from .widgets import ActionCell, StatisticCard
+from .widgets import ActionCell, StatisticCard, StatusComboBox
 
 
 SORT_MODE_LABELS = {
@@ -350,7 +350,7 @@ class MainWindow(QMainWindow):
         self.empty_label.setVisible(not self._records)
 
     def _add_status_combo(self, row: int, record: ApplicationRecord) -> None:
-        combo = QComboBox()
+        combo = StatusComboBox()
         combo.addItems(APPLICATION_STATUSES)
         combo.setCurrentText(record.status)
         combo.setStyleSheet(

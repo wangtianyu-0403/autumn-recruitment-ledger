@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
+from PySide6.QtCore import QPoint, QSettings, Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
 
 from recruitment_ledger.backup import BackupManager
+from recruitment_ledger.constants import APPLICATION_STATUSES
 from recruitment_ledger.models import ApplicationRecord
 from recruitment_ledger.paths import AppPaths
 from recruitment_ledger.repository import SortMode
@@ -42,6 +44,65 @@ def _create_record(
 
 def _visible_companies(window: MainWindow) -> list[str]:
     return [window.table.item(row, 0).text() for row in range(window.table.rowCount())]
+
+
+def test_status_wheel_scrolls_table_without_changing_business_state(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database, repository
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    for number in range(30):
+        _create_record(service, f"scroll record {number}", "2026-01-02")
+    application_id = _create_record(service, "wheel target", "2026-01-01")
+    original = service.get(application_id)
+    assert original is not None
+    original_status = original.status
+    original_updated_at = original.updated_at
+    original_history_count = len(repository.list_status_history(application_id))
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    window.show()
+    QApplication.processEvents()
+    combo = window.table.cellWidget(0, 3)
+    original_scroll_value = window.table.verticalScrollBar().value()
+
+    QTest.wheelEvent(
+        window.windowHandle(),
+        combo.mapTo(window, combo.rect().center()),
+        QPoint(0, -120),
+    )
+    QApplication.processEvents()
+
+    updated = service.get(application_id)
+    assert updated is not None
+    assert updated.status == original_status
+    assert updated.updated_at == original_updated_at
+    assert len(repository.list_status_history(application_id)) == original_history_count
+    assert window.table.verticalScrollBar().value() > original_scroll_value
+
+
+def test_open_status_popup_still_allows_explicit_selection(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database, repository
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    application_id = _create_record(service, "popup target", "2026-01-01")
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    window.show()
+    combo = window.table.cellWidget(0, 3)
+    original_history_count = len(repository.list_status_history(application_id))
+    target_index = combo.findText(APPLICATION_STATUSES[0])
+    assert target_index != combo.currentIndex()
+
+    combo.showPopup()
+    popup_index = combo.model().index(target_index, 0)
+    qtbot.mouseClick(
+        combo.view().viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=combo.view().visualRect(popup_index).center(),
+    )
+    qtbot.waitUntil(lambda: service.get(application_id).status == APPLICATION_STATUSES[0])
+
+    assert len(repository.list_status_history(application_id)) == original_history_count + 1
 
 
 def test_window_exposes_three_sort_modes_and_uses_draggable_table(

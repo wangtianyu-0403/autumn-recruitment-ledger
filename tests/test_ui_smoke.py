@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
+from PySide6.QtCore import QPoint, QPointF, QSettings, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialogButtonBox, QMessageBox, QWidget
 
 from recruitment_ledger.backup import BackupManager
+from recruitment_ledger.constants import APPLICATION_STATUSES
 from recruitment_ledger.models import ApplicationRecord
 from recruitment_ledger.paths import AppPaths
 from recruitment_ledger.repository import SortMode
@@ -42,6 +45,110 @@ def _create_record(
 
 def _visible_companies(window: MainWindow) -> list[str]:
     return [window.table.item(row, 0).text() for row in range(window.table.rowCount())]
+
+
+def _make_wheel_event(widget: QWidget, angle_delta_y: int) -> QWheelEvent:
+    position = widget.rect().center()
+    return QWheelEvent(
+        QPointF(position),
+        QPointF(widget.mapToGlobal(position)),
+        QPoint(),
+        QPoint(0, angle_delta_y),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+
+
+def test_status_wheel_scrolls_table_without_changing_business_state(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database, repository
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    for number in range(20):
+        _create_record(service, f"scroll record {number}", "2026-01-02")
+    application_id = _create_record(service, "wheel target", "2026-01-01")
+    for number in range(20, 30):
+        _create_record(service, f"scroll record {number}", "2026-01-02")
+    original = service.get(application_id)
+    assert original is not None
+    original_status = original.status
+    original_updated_at = original.updated_at
+    original_history_count = len(repository.list_status_history(application_id))
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    window.show()
+    QApplication.processEvents()
+    target_row = next(
+        row for row, record in enumerate(window._records) if record.id == application_id
+    )
+    assert window._records[target_row].id == application_id
+    window.table.scrollToItem(
+        window.table.item(target_row, 0),
+        QAbstractItemView.ScrollHint.PositionAtCenter,
+    )
+    QApplication.processEvents()
+    combo = window.table.cellWidget(target_row, 3)
+    assert combo is not None
+    original_scroll_value = window.table.verticalScrollBar().value()
+    assert window.table.verticalScrollBar().maximum() > original_scroll_value
+
+    QTest.wheelEvent(
+        window.windowHandle(),
+        combo.mapTo(window, combo.rect().center()),
+        QPoint(0, -120),
+    )
+    QApplication.processEvents()
+
+    updated = service.get(application_id)
+    assert updated is not None
+    assert updated.status == original_status
+    assert updated.updated_at == original_updated_at
+    assert len(repository.list_status_history(application_id)) == original_history_count
+    assert window.table.verticalScrollBar().value() > original_scroll_value
+
+
+def test_open_status_popup_still_allows_explicit_selection(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database, repository
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    application_id = _create_record(service, "popup target", "2026-01-01")
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    window.show()
+    combo = window.table.cellWidget(0, 3)
+    assert combo is not None
+    original_history_count = len(repository.list_status_history(application_id))
+    target_index = combo.findText(APPLICATION_STATUSES[4])
+    assert target_index != combo.currentIndex()
+
+    combo.addItems([f"popup scroll option {number}" for number in range(40)])
+    combo.setMaxVisibleItems(3)
+    combo.view().setFixedHeight(72)
+    combo.showPopup()
+    QApplication.processEvents()
+    popup_view = combo.view()
+    popup_scrollbar = popup_view.verticalScrollBar()
+    original_popup_scroll_value = popup_scrollbar.value()
+    assert popup_scrollbar.maximum() > original_popup_scroll_value
+    popup_viewport = popup_view.viewport()
+    QApplication.sendEvent(
+        popup_viewport,
+        _make_wheel_event(popup_viewport, angle_delta_y=-120),
+    )
+    QApplication.processEvents()
+    assert popup_scrollbar.value() > original_popup_scroll_value
+
+    popup_index = combo.model().index(target_index, 0)
+    popup_view.scrollTo(popup_index, QAbstractItemView.ScrollHint.PositionAtCenter)
+    qtbot.mouseClick(
+        popup_viewport,
+        Qt.MouseButton.LeftButton,
+        pos=popup_view.visualRect(popup_index).center(),
+    )
+    qtbot.waitUntil(lambda: service.get(application_id).status == APPLICATION_STATUSES[4])
+
+    assert len(repository.list_status_history(application_id)) == original_history_count + 1
 
 
 def test_window_exposes_three_sort_modes_and_uses_draggable_table(
@@ -92,6 +199,7 @@ def test_automatic_drag_switches_to_manual_and_rebuilds_visible_rows(
     assert window.table.apply_row_move(0, 1)
 
     assert window.sort_mode_combo.currentData() == SortMode.MANUAL.value
+    qtbot.waitUntil(lambda: not window._table_refresh_timer.isActive())
     assert [record.id for record in window._records] == [older_id, newer_id]
     assert _visible_companies(window) == ["较早公司", "较晚公司"]
 
@@ -136,8 +244,59 @@ def test_failed_drag_reports_error_and_restores_database_order(
     window._rows_reordered([first_id, second_id])
 
     assert window.sort_mode_combo.currentData() == SortMode.UPDATED_AT.value
+    qtbot.waitUntil(lambda: not window._table_refresh_timer.isActive())
     assert _visible_companies(window) == original
     assert errors and "排序" in errors[0][0]
+
+
+def test_drag_refresh_runs_after_native_move_cleanup(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    first = _create_record(service, "甲公司", "2026-01-01")
+    second = _create_record(service, "乙公司", "2026-01-02")
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    window.sort_mode_combo.setCurrentIndex(
+        window.sort_mode_combo.findData(SortMode.MANUAL.value)
+    )
+
+    window._rows_reordered([first, second])
+    for column in (0, 1, 2, 4, 5, 7):
+        window.table.takeItem(0, column)
+
+    qtbot.waitUntil(lambda: window.table.item(0, 0) is not None)
+
+    assert all(window.table.item(0, column) is not None for column in (0, 1, 2, 4, 5, 7))
+    assert window.table.cellWidget(0, 3) is not None
+    assert window.table.cellWidget(0, 6) is not None
+    assert window.table.cellWidget(0, 8) is not None
+
+
+def test_failed_drag_queues_refresh_after_native_move_cleanup(
+    qtbot, monkeypatch, tmp_path, service, app_paths, database
+) -> None:
+    _isolated_settings(monkeypatch, tmp_path)
+    first = _create_record(service, "甲公司", "2026-01-01")
+    second = _create_record(service, "乙公司", "2026-01-02")
+    window = MainWindow(service, BackupManager(database, app_paths), app_paths)
+    qtbot.addWidget(window)
+    original_ids = [record.id for record in window._records]
+    monkeypatch.setattr(
+        service,
+        "reorder_visible",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args: None)
+
+    window._rows_reordered([second, first])
+    for column in (0, 1, 2, 4, 5, 7):
+        window.table.takeItem(0, column)
+
+    qtbot.waitUntil(lambda: window.table.item(0, 0) is not None)
+
+    assert [record.id for record in window._records] == original_ids
+    assert all(window.table.item(0, column) is not None for column in (0, 1, 2, 4, 5, 7))
 
 
 def test_pin_action_keeps_timestamp_and_refreshes_marker_and_button(
@@ -239,7 +398,7 @@ def test_main_window_contains_required_controls(
     assert window.table.columnWidth(8) >= 230
     assert window.table.columnWidth(8) >= action_cell.minimumSizeHint().width()
     assert window.version_label.objectName() == "versionLabel"
-    assert window.version_label.text() == "版本v1.1.2"
+    assert window.version_label.text() == "版本v1.1.3"
     assert window.statusBar().isAncestorOf(window.version_label)
     assert window.check_update_button.text() == "检查更新"
 
@@ -256,11 +415,11 @@ def test_manual_update_check_reports_current_version(
         main_window,
         "fetch_latest_release",
         lambda: ReleaseInfo(
-            version=(1, 1, 2),
-            tag_name="v1.1.2",
+            version=(1, 1, 3),
+            tag_name="v1.1.3",
             asset_url="https://example.invalid/update.zip",
             asset_digest="sha256:" + "a" * 64,
-            html_url="https://example.invalid/v1.1.2",
+            html_url="https://example.invalid/v1.1.3",
         ),
     )
     monkeypatch.setattr(
@@ -273,7 +432,7 @@ def test_manual_update_check_reports_current_version(
 
     window.check_for_updates()
 
-    assert messages == [("检查更新", "当前已是最新版本（v1.1.2）。")]
+    assert messages == [("检查更新", "当前已是最新版本（v1.1.3）。")]
 
 
 def test_source_mode_never_installs_newer_release(

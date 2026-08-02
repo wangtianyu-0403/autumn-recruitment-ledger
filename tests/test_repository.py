@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from recruitment_ledger.models import ApplicationRecord
-from recruitment_ledger.repository import ApplicationRepository
+from recruitment_ledger.repository import (
+    ApplicationRepository,
+    RepositoryError,
+    SortMode,
+)
 
 
 def make_record(
@@ -116,3 +122,172 @@ def test_statistics_and_updated_order(repository: ApplicationRepository) -> None
     listed = repository.list_applications()
     assert counts == {"笔试": 1, "已有Offer": 1}
     assert [item.id for item in listed] == [first, second]
+
+
+def create_ordered_record(
+    repository: ApplicationRepository,
+    company: str,
+    application_date: str,
+) -> int:
+    record = make_record(company=company)
+    record.application_date = application_date
+    return repository.create_application(record)
+
+
+def test_list_applications_supports_all_stable_sort_modes(
+    repository: ApplicationRepository,
+) -> None:
+    first = create_ordered_record(repository, "first", "2026-01-01")
+    second = create_ordered_record(repository, "second", "2026-07-30")
+    third = create_ordered_record(repository, "third", "2026-07-30")
+    connection = repository.database.connection
+    connection.execute(
+        "UPDATE applications SET updated_at = '2026-01-01 00:00:00' WHERE id = ?",
+        (first,),
+    )
+    connection.execute(
+        "UPDATE applications SET updated_at = '2026-07-30 00:00:00' WHERE id IN (?, ?)",
+        (second, third),
+    )
+    connection.commit()
+
+    assert [
+        item.id
+        for item in repository.list_applications(sort_mode=SortMode.MANUAL)
+    ] == [third, second, first]
+    assert [
+        item.id
+        for item in repository.list_applications(sort_mode=SortMode.APPLICATION_DATE)
+    ] == [third, second, first]
+    assert [
+        item.id
+        for item in repository.list_applications(sort_mode=SortMode.UPDATED_AT)
+    ] == [third, second, first]
+
+
+def test_pinned_records_precede_automatic_sort_and_keep_updated_timestamp(
+    repository: ApplicationRepository,
+) -> None:
+    older = create_ordered_record(repository, "older", "2026-01-01")
+    newer = create_ordered_record(repository, "newer", "2026-07-30")
+    before = repository.get_application(older)
+    assert before is not None
+
+    repository.set_pinned(older, True)
+
+    after = repository.get_application(older)
+    assert after is not None
+    assert after.updated_at == before.updated_at
+    assert [
+        item.id
+        for item in repository.list_applications(sort_mode=SortMode.APPLICATION_DATE)
+    ] == [older, newer]
+    assert [
+        item.id
+        for item in repository.list_applications(sort_mode=SortMode.UPDATED_AT)
+    ][0] == older
+
+
+def test_set_pinned_moves_record_to_top_of_destination_group(
+    repository: ApplicationRepository,
+) -> None:
+    first = create_ordered_record(repository, "first", "2026-01-01")
+    second = create_ordered_record(repository, "second", "2026-01-02")
+    repository.set_pinned(first, True)
+    repository.set_pinned(second, True)
+
+    assert repository.list_active_ids(SortMode.MANUAL) == [second, first]
+
+    repository.set_pinned(second, False)
+
+    assert repository.list_active_ids(SortMode.MANUAL) == [first, second]
+
+
+def test_new_record_enters_top_of_unpinned_manual_group(
+    repository: ApplicationRepository,
+) -> None:
+    first = create_ordered_record(repository, "first", "2026-01-01")
+    second = create_ordered_record(repository, "second", "2026-01-02")
+
+    assert repository.list_active_ids(SortMode.MANUAL) == [second, first]
+
+
+@pytest.mark.parametrize(
+    "supplied_ids",
+    [
+        lambda first, second, pinned: [first, first],
+        lambda first, second, pinned: [first, 999999],
+        lambda first, second, pinned: [first, pinned],
+        lambda first, second, pinned: [first],
+    ],
+    ids=["duplicate", "invalid", "cross-group", "incomplete"],
+)
+def test_save_manual_order_rejects_invalid_sets_without_partial_writes(
+    repository: ApplicationRepository,
+    supplied_ids,
+) -> None:
+    first = create_ordered_record(repository, "first", "2026-01-01")
+    second = create_ordered_record(repository, "second", "2026-01-02")
+    pinned = create_ordered_record(repository, "pinned", "2026-01-03")
+    repository.set_pinned(pinned, True)
+    before = {
+        row["id"]: row["manual_order"]
+        for row in repository.database.connection.execute(
+            "SELECT id, manual_order FROM applications ORDER BY id"
+        )
+    }
+
+    with pytest.raises(RepositoryError):
+        repository.save_manual_order(
+            supplied_ids(first, second, pinned),
+            pinned=False,
+        )
+
+    after = {
+        row["id"]: row["manual_order"]
+        for row in repository.database.connection.execute(
+            "SELECT id, manual_order FROM applications ORDER BY id"
+        )
+    }
+    assert after == before
+
+
+def test_save_manual_order_persists_complete_group_atomically(
+    repository: ApplicationRepository,
+) -> None:
+    first = create_ordered_record(repository, "first", "2026-01-01")
+    second = create_ordered_record(repository, "second", "2026-01-02")
+
+    repository.save_manual_order([first, second], pinned=False)
+
+    assert repository.list_active_ids(SortMode.MANUAL) == [first, second]
+
+
+def test_invalid_sort_mode_is_rejected(repository: ApplicationRepository) -> None:
+    with pytest.raises(RepositoryError, match="未知排序模式"):
+        repository.list_applications(sort_mode="updated_at; DROP TABLE applications")
+
+
+def test_soft_delete_and_restore_preserve_ordering_fields(
+    repository: ApplicationRepository,
+) -> None:
+    application_id = create_ordered_record(repository, "ordered", "2026-01-01")
+    repository.set_pinned(application_id, True)
+    before = repository.get_application(application_id)
+    assert before is not None
+
+    repository.soft_delete(application_id)
+    deleted = repository.get_application(application_id)
+    assert deleted is not None
+    assert (deleted.is_pinned, deleted.manual_order) == (
+        before.is_pinned,
+        before.manual_order,
+    )
+
+    repository.restore(application_id)
+    restored = repository.get_application(application_id)
+    assert restored is not None
+    assert (restored.is_pinned, restored.manual_order) == (
+        before.is_pinned,
+        before.manual_order,
+    )

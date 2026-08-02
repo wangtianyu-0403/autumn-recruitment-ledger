@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
+from enum import Enum
+from typing import Sequence
 
 from .constants import TIMESTAMP_FORMAT
 from .database import Database
@@ -10,6 +12,23 @@ from .models import ApplicationRecord, StatusHistoryRecord
 
 class RepositoryError(RuntimeError):
     """仓储操作失败。"""
+
+
+class SortMode(str, Enum):
+    MANUAL = "manual"
+    APPLICATION_DATE = "application_date"
+    UPDATED_AT = "updated_at"
+
+
+_ORDER_BY = {
+    SortMode.MANUAL: "is_pinned DESC, manual_order ASC, id ASC",
+    SortMode.APPLICATION_DATE: (
+        "is_pinned DESC, application_date DESC, manual_order ASC, id DESC"
+    ),
+    SortMode.UPDATED_AT: (
+        "is_pinned DESC, updated_at DESC, manual_order ASC, id DESC"
+    ),
+}
 
 
 def current_timestamp() -> str:
@@ -43,13 +62,22 @@ class ApplicationRepository:
         placeholders = ", ".join("?" for _ in self._APPLICATION_COLUMNS)
         try:
             with self.database.transaction() as connection:
+                minimum_order = connection.execute(
+                    """
+                    SELECT MIN(manual_order)
+                    FROM applications
+                    WHERE is_deleted = 0 AND is_pinned = 0
+                    """
+                ).fetchone()[0]
+                manual_order = 0 if minimum_order is None else int(minimum_order) - 1
                 cursor = connection.execute(
                     f"""
                     INSERT INTO applications (
-                        {", ".join(self._APPLICATION_COLUMNS)}, created_at, updated_at, is_deleted
-                    ) VALUES ({placeholders}, ?, ?, 0)
+                        {", ".join(self._APPLICATION_COLUMNS)}, created_at, updated_at,
+                        is_deleted, is_pinned, manual_order
+                    ) VALUES ({placeholders}, ?, ?, 0, 0, ?)
                     """,
-                    (*values, now, now),
+                    (*values, now, now, manual_order),
                 )
                 application_id = int(cursor.lastrowid)
                 connection.execute(
@@ -79,7 +107,9 @@ class ApplicationRepository:
         search_text: str = "",
         status: str | None = None,
         include_deleted: bool = False,
+        sort_mode: SortMode = SortMode.UPDATED_AT,
     ) -> list[ApplicationRecord]:
+        order_by = self._order_by(sort_mode)
         clauses = ["1 = 1"] if include_deleted else ["is_deleted = 0"]
         parameters: list[object] = []
         cleaned_search = search_text.strip()
@@ -102,13 +132,96 @@ class ApplicationRepository:
         query = f"""
             SELECT * FROM applications
             WHERE {" AND ".join(clauses)}
-            ORDER BY updated_at DESC, id DESC
+            ORDER BY {order_by}
         """
         try:
             rows = self.database.connection.execute(query, parameters).fetchall()
             return [ApplicationRecord.from_row(row) for row in rows]
         except sqlite3.Error as exc:
             raise RepositoryError(f"读取岗位列表失败:{exc}") from exc
+
+    def list_active_ids(self, sort_mode: SortMode) -> list[int]:
+        order_by = self._order_by(sort_mode)
+        try:
+            rows = self.database.connection.execute(
+                f"""
+                SELECT id FROM applications
+                WHERE is_deleted = 0
+                ORDER BY {order_by}
+                """
+            ).fetchall()
+            return [int(row["id"]) for row in rows]
+        except sqlite3.Error as exc:
+            raise RepositoryError(f"读取岗位顺序失败：{exc}") from exc
+
+    def set_pinned(self, application_id: int, pinned: bool) -> None:
+        target = int(bool(pinned))
+        try:
+            with self.database.transaction() as connection:
+                row = connection.execute(
+                    """
+                    SELECT is_pinned FROM applications
+                    WHERE id = ? AND is_deleted = 0
+                    """,
+                    (application_id,),
+                ).fetchone()
+                if row is None:
+                    raise RepositoryError("岗位不存在或已被删除。")
+                if int(row["is_pinned"]) == target:
+                    return
+                minimum_order = connection.execute(
+                    """
+                    SELECT MIN(manual_order) FROM applications
+                    WHERE is_deleted = 0 AND is_pinned = ? AND id != ?
+                    """,
+                    (target, application_id),
+                ).fetchone()[0]
+                manual_order = 0 if minimum_order is None else int(minimum_order) - 1
+                connection.execute(
+                    """
+                    UPDATE applications
+                    SET is_pinned = ?, manual_order = ?
+                    WHERE id = ? AND is_deleted = 0
+                    """,
+                    (target, manual_order, application_id),
+                )
+        except RepositoryError:
+            raise
+        except sqlite3.Error as exc:
+            raise RepositoryError(f"修改置顶状态失败：{exc}") from exc
+
+    def save_manual_order(
+        self,
+        application_ids: Sequence[int],
+        pinned: bool,
+    ) -> None:
+        supplied_ids = list(application_ids)
+        if len(supplied_ids) != len(set(supplied_ids)):
+            raise RepositoryError("岗位顺序包含重复记录。")
+        target = int(bool(pinned))
+        try:
+            with self.database.transaction() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT id FROM applications
+                    WHERE is_deleted = 0 AND is_pinned = ?
+                    """,
+                    (target,),
+                ).fetchall()
+                active_ids = {int(row["id"]) for row in rows}
+                if set(supplied_ids) != active_ids:
+                    raise RepositoryError("岗位顺序必须完整且属于同一置顶分组。")
+                connection.executemany(
+                    "UPDATE applications SET manual_order = ? WHERE id = ?",
+                    (
+                        (index, application_id)
+                        for index, application_id in enumerate(supplied_ids)
+                    ),
+                )
+        except RepositoryError:
+            raise
+        except sqlite3.Error as exc:
+            raise RepositoryError(f"保存岗位顺序失败：{exc}") from exc
 
     def list_deleted(self) -> list[ApplicationRecord]:
         try:
@@ -254,6 +367,13 @@ class ApplicationRepository:
             raise RepositoryError(f"{action}岗位失败:{exc}") from exc
 
     @classmethod
+    def _order_by(cls, sort_mode: SortMode) -> str:
+        try:
+            normalized = SortMode(sort_mode)
+        except (TypeError, ValueError) as exc:
+            raise RepositoryError("未知排序模式。") from exc
+        return _ORDER_BY[normalized]
+
+    @classmethod
     def _record_values(cls, record: ApplicationRecord) -> tuple[object, ...]:
         return tuple(getattr(record, column) for column in cls._APPLICATION_COLUMNS)
-

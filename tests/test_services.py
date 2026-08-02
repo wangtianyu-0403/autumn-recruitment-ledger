@@ -27,6 +27,9 @@ class FakeRepository:
         self.saved_pinned: list[int] | None = None
         self.saved_unpinned: list[int] | None = None
         self.save_calls: list[tuple[list[int], bool]] = []
+        self.batch_save_calls: list[
+            tuple[list[int] | None, list[int] | None]
+        ] = []
         self.list_arguments: tuple[str, str | None, bool, SortMode] | None = None
         self.pin_calls: list[tuple[int, bool]] = []
 
@@ -62,6 +65,22 @@ class FakeRepository:
             self.unpinned_ids = saved_ids
             self.saved_unpinned = saved_ids
 
+    def save_manual_orders(
+        self,
+        *,
+        pinned_ids: Sequence[int] | None = None,
+        unpinned_ids: Sequence[int] | None = None,
+    ) -> None:
+        saved_pinned = list(pinned_ids) if pinned_ids is not None else None
+        saved_unpinned = list(unpinned_ids) if unpinned_ids is not None else None
+        self.batch_save_calls.append((saved_pinned, saved_unpinned))
+        if saved_pinned is not None:
+            self.pinned_ids = saved_pinned
+            self.saved_pinned = saved_pinned
+        if saved_unpinned is not None:
+            self.unpinned_ids = saved_unpinned
+            self.saved_unpinned = saved_unpinned
+
     def list_applications(
         self,
         search_text: str = "",
@@ -83,6 +102,7 @@ def test_reorder_visible_preserves_hidden_slots() -> None:
     service.reorder_visible([4, 2], SortMode.MANUAL)
 
     assert repository.saved_unpinned == [1, 4, 3, 2, 5]
+    assert repository.batch_save_calls == [(None, [1, 4, 3, 2, 5])]
 
 
 def test_reorder_visible_keeps_pin_groups_separate() -> None:
@@ -93,6 +113,7 @@ def test_reorder_visible_keeps_pin_groups_separate() -> None:
 
     assert repository.saved_pinned == [2, 1]
     assert repository.saved_unpinned == [3, 4]
+    assert repository.batch_save_calls == [([2, 1], [3, 4])]
 
 
 @pytest.mark.parametrize(
@@ -110,6 +131,7 @@ def test_reorder_visible_rejects_invalid_ids_before_any_write(
         service.reorder_visible(visible_ids, SortMode.MANUAL)  # type: ignore[arg-type]
 
     assert repository.save_calls == []
+    assert repository.batch_save_calls == []
 
 
 def test_automatic_reorder_uses_full_automatic_order_as_manual_baseline() -> None:
@@ -124,6 +146,7 @@ def test_automatic_reorder_uses_full_automatic_order_as_manual_baseline() -> Non
 
     assert repository.saved_pinned == [2, 1]
     assert repository.saved_unpinned == [3, 4, 5]
+    assert repository.batch_save_calls == [([2, 1], [3, 4, 5])]
 
 
 def test_list_passes_requested_sort_mode_to_repository() -> None:

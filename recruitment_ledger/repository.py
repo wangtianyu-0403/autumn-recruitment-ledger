@@ -195,29 +195,49 @@ class ApplicationRepository:
         application_ids: Sequence[int],
         pinned: bool,
     ) -> None:
-        supplied_ids = list(application_ids)
-        if len(supplied_ids) != len(set(supplied_ids)):
-            raise RepositoryError("岗位顺序包含重复记录。")
-        target = int(bool(pinned))
+        if pinned:
+            self.save_manual_orders(pinned_ids=application_ids)
+        else:
+            self.save_manual_orders(unpinned_ids=application_ids)
+
+    def save_manual_orders(
+        self,
+        *,
+        pinned_ids: Sequence[int] | None = None,
+        unpinned_ids: Sequence[int] | None = None,
+    ) -> None:
+        submitted_groups: list[tuple[int, list[int]]] = []
+        if pinned_ids is not None:
+            submitted_groups.append((1, list(pinned_ids)))
+        if unpinned_ids is not None:
+            submitted_groups.append((0, list(unpinned_ids)))
+
         try:
             with self.database.transaction() as connection:
-                rows = connection.execute(
-                    """
-                    SELECT id FROM applications
-                    WHERE is_deleted = 0 AND is_pinned = ?
-                    """,
-                    (target,),
-                ).fetchall()
-                active_ids = {int(row["id"]) for row in rows}
-                if set(supplied_ids) != active_ids:
-                    raise RepositoryError("岗位顺序必须完整且属于同一置顶分组。")
-                connection.executemany(
-                    "UPDATE applications SET manual_order = ? WHERE id = ?",
-                    (
-                        (index, application_id)
-                        for index, application_id in enumerate(supplied_ids)
-                    ),
-                )
+                for target, supplied_ids in submitted_groups:
+                    if len(supplied_ids) != len(set(supplied_ids)):
+                        raise RepositoryError("岗位顺序包含重复记录。")
+                    rows = connection.execute(
+                        """
+                        SELECT id FROM applications
+                        WHERE is_deleted = 0 AND is_pinned = ?
+                        """,
+                        (target,),
+                    ).fetchall()
+                    active_ids = {int(row["id"]) for row in rows}
+                    if set(supplied_ids) != active_ids:
+                        raise RepositoryError(
+                            "岗位顺序必须完整且属于同一置顶分组。"
+                        )
+
+                for _target, supplied_ids in submitted_groups:
+                    connection.executemany(
+                        "UPDATE applications SET manual_order = ? WHERE id = ?",
+                        (
+                            (index, application_id)
+                            for index, application_id in enumerate(supplied_ids)
+                        ),
+                    )
         except RepositoryError:
             raise
         except sqlite3.Error as exc:

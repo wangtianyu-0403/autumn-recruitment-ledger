@@ -263,6 +263,49 @@ def test_save_manual_order_persists_complete_group_atomically(
     assert repository.list_active_ids(SortMode.MANUAL) == [first, second]
 
 
+def test_save_manual_orders_rolls_back_both_groups_when_second_update_fails(
+    repository: ApplicationRepository,
+) -> None:
+    first = create_ordered_record(repository, "first", "2026-01-01")
+    second = create_ordered_record(repository, "second", "2026-01-02")
+    third = create_ordered_record(repository, "third", "2026-01-03")
+    fourth = create_ordered_record(repository, "fourth", "2026-01-04")
+    repository.set_pinned(third, True)
+    repository.set_pinned(fourth, True)
+    connection = repository.database.connection
+    before = {
+        int(row["id"]): int(row["manual_order"])
+        for row in connection.execute(
+            "SELECT id, manual_order FROM applications ORDER BY id"
+        )
+    }
+    connection.execute(
+        """
+        CREATE TRIGGER fail_unpinned_manual_order
+        BEFORE UPDATE OF manual_order ON applications
+        WHEN OLD.is_pinned = 0
+        BEGIN
+            SELECT RAISE(ABORT, 'injected second-group failure');
+        END
+        """
+    )
+    connection.commit()
+
+    with pytest.raises(RepositoryError, match="保存岗位顺序失败"):
+        repository.save_manual_orders(
+            pinned_ids=[third, fourth],
+            unpinned_ids=[first, second],
+        )
+
+    after = {
+        int(row["id"]): int(row["manual_order"])
+        for row in connection.execute(
+            "SELECT id, manual_order FROM applications ORDER BY id"
+        )
+    }
+    assert after == before
+
+
 def test_invalid_sort_mode_is_rejected(repository: ApplicationRepository) -> None:
     with pytest.raises(RepositoryError, match="未知排序模式"):
         repository.list_applications(sort_mode="updated_at; DROP TABLE applications")

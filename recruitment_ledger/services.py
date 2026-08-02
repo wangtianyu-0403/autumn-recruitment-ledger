@@ -100,10 +100,14 @@ class ApplicationService:
 
         final_pinned = _merge_visible_order(pinned_ids, visible_pinned)
         final_unpinned = _merge_visible_order(unpinned_ids, visible_unpinned)
-        if resolved_mode is not SortMode.MANUAL or visible_pinned:
-            self.repository.save_manual_order(final_pinned, pinned=True)
-        if resolved_mode is not SortMode.MANUAL or visible_unpinned:
-            self.repository.save_manual_order(final_unpinned, pinned=False)
+        automatic_mode = resolved_mode is not SortMode.MANUAL
+        pinned_order = final_pinned if automatic_mode or visible_pinned else None
+        unpinned_order = final_unpinned if automatic_mode or visible_unpinned else None
+        if pinned_order is not None or unpinned_order is not None:
+            self.repository.save_manual_orders(
+                pinned_ids=pinned_order,
+                unpinned_ids=unpinned_order,
+            )
 
     def list_deleted(self) -> list[ApplicationRecord]:
         return self.repository.list_deleted()
